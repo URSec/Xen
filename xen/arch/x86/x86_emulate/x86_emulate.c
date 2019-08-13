@@ -916,11 +916,13 @@ typedef union {
 "orl  %"_LO32 _tmp",("_STK"); "                                 \
 "popf; "                                                        \
 "pop  %"_tmp"; "                                                \
-"movl %"_LO32 _tmp",%"_LO32 _sav"; "
+"movl %"_LO32 _tmp",%"_LO32 _sav"; "                            \
+".bundle_lock; "
 
 /* After executing instruction: write-back necessary bits in EFLAGS. */
 #define _POST_EFLAGS(_sav, _msk, _tmp)          \
 /* _sav |= EFLAGS & _msk; */                    \
+".bundle_unlock; "                              \
 "pushf; "                                       \
 "pop  %"_tmp"; "                                \
 "andl %"_msk",%"_LO32 _tmp"; "                  \

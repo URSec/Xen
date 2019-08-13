@@ -34,7 +34,7 @@ extern void __bitop_bad_size(void);
  */
 static inline void set_bit(int nr, volatile void *addr)
 {
-    asm volatile ( "lock; btsl %1,%0"
+    asm volatile ( "lock btsl %1,%0"
                    : "+m" (ADDR) : "Ir" (nr) : "memory");
 }
 #define set_bit(nr, addr) ({                            \
@@ -75,7 +75,7 @@ static inline void constant_set_bit(int nr, void *addr)
  */
 static inline void clear_bit(int nr, volatile void *addr)
 {
-    asm volatile ( "lock; btrl %1,%0"
+    asm volatile ( "lock btrl %1,%0"
                    : "+m" (ADDR) : "Ir" (nr) : "memory");
 }
 #define clear_bit(nr, addr) ({                          \
@@ -142,7 +142,7 @@ static inline void constant_change_bit(int nr, void *addr)
  */
 static inline void change_bit(int nr, volatile void *addr)
 {
-    asm volatile ( "lock; btcl %1,%0"
+    asm volatile ( "lock btcl %1,%0"
                     : "+m" (ADDR) : "Ir" (nr) : "memory");
 }
 #define change_bit(nr, addr) ({                         \
@@ -162,7 +162,7 @@ static inline int test_and_set_bit(int nr, volatile void *addr)
 {
     int oldbit;
 
-    asm volatile ( "lock; btsl %[nr], %[addr]\n\t"
+    asm volatile ( "lock btsl %[nr], %[addr]\n\t"
                    ASM_FLAG_OUT(, "sbbl %[old], %[old]\n\t")
                    : [old] ASM_FLAG_OUT("=@ccc", "=r") (oldbit),
                      [addr] "+m" (ADDR) : [nr] "Ir" (nr) : "memory" );
@@ -211,7 +211,7 @@ static inline int test_and_clear_bit(int nr, volatile void *addr)
 {
     int oldbit;
 
-    asm volatile ( "lock; btrl %[nr], %[addr]\n\t"
+    asm volatile ( "lock btrl %[nr], %[addr]\n\t"
                    ASM_FLAG_OUT(, "sbbl %[old], %[old]\n\t")
                    : [old] ASM_FLAG_OUT("=@ccc", "=r") (oldbit),
                      [addr] "+m" (ADDR) : [nr] "Ir" (nr) : "memory" );
@@ -277,7 +277,7 @@ static inline int test_and_change_bit(int nr, volatile void *addr)
 {
     int oldbit;
 
-    asm volatile ( "lock; btcl %[nr], %[addr]\n\t"
+    asm volatile ( "lock btcl %[nr], %[addr]\n\t"
                    ASM_FLAG_OUT(, "sbbl %[old], %[old]\n\t")
                    : [old] ASM_FLAG_OUT("=@ccc", "=r") (oldbit),
                      [addr] "+m" (ADDR) : [nr] "Ir" (nr) : "memory" );

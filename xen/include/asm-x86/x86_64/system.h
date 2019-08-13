@@ -24,7 +24,7 @@ static always_inline __uint128_t __cmpxchg16b(
     ASSERT(cpu_has_cx16);
 
     /* Don't use "=A" here - clang can't deal with that. */
-    asm volatile ( "lock; cmpxchg16b %2"
+    asm volatile ( "lock cmpxchg16b %2"
                    : "=d" (prev.hi), "=a" (prev.lo), "+m" (*__xg(ptr))
                    : "c" (new.hi), "b" (new.lo), "0" (old.hi), "1" (old.lo) );
 
@@ -66,7 +66,7 @@ static always_inline __uint128_t cmpxchg16b_local_(
 #define __cmpxchg_user(_p,_o,_n,_isuff,_oppre,_regtype)                 \
     stac();                                                             \
     asm volatile (                                                      \
-        "1: lock; cmpxchg"_isuff" %"_oppre"2,%3\n"                      \
+        "1: lock cmpxchg"_isuff" %"_oppre"2,%3\n"                       \
         "2:\n"                                                          \
         ".section .fixup,\"ax\"\n"                                      \
         "3:     movl $1,%1\n"                                           \

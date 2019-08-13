@@ -79,28 +79,28 @@ static always_inline unsigned long __cmpxchg(
     switch ( size )
     {
     case 1:
-        asm volatile ( "lock; cmpxchgb %b1,%2"
+        asm volatile ( "lock cmpxchgb %b1,%2"
                        : "=a" (prev)
                        : "q" (new), "m" (*__xg(ptr)),
                        "0" (old)
                        : "memory" );
         return prev;
     case 2:
-        asm volatile ( "lock; cmpxchgw %w1,%2"
+        asm volatile ( "lock cmpxchgw %w1,%2"
                        : "=a" (prev)
                        : "r" (new), "m" (*__xg(ptr)),
                        "0" (old)
                        : "memory" );
         return prev;
     case 4:
-        asm volatile ( "lock; cmpxchgl %k1,%2"
+        asm volatile ( "lock cmpxchgl %k1,%2"
                        : "=a" (prev)
                        : "r" (new), "m" (*__xg(ptr)),
                        "0" (old)
                        : "memory" );
         return prev;
     case 8:
-        asm volatile ( "lock; cmpxchgq %1,%2"
+        asm volatile ( "lock cmpxchgq %1,%2"
                        : "=a" (prev)
                        : "r" (new), "m" (*__xg(ptr)),
                        "0" (old)
@@ -161,22 +161,22 @@ static always_inline unsigned long __xadd(
     switch ( size )
     {
     case 1:
-        asm volatile ( "lock; xaddb %b0,%1"
+        asm volatile ( "lock xaddb %b0,%1"
                        : "+r" (v), "+m" (*__xg(ptr))
                        :: "memory");
         return v;
     case 2:
-        asm volatile ( "lock; xaddw %w0,%1"
+        asm volatile ( "lock xaddw %w0,%1"
                        : "+r" (v), "+m" (*__xg(ptr))
                        :: "memory");
         return v;
     case 4:
-        asm volatile ( "lock; xaddl %k0,%1"
+        asm volatile ( "lock xaddl %k0,%1"
                        : "+r" (v), "+m" (*__xg(ptr))
                        :: "memory");
         return v;
     case 8:
-        asm volatile ( "lock; xaddq %q0,%1"
+        asm volatile ( "lock xaddq %q0,%1"
                        : "+r" (v), "+m" (*__xg(ptr))
                        :: "memory");
 
