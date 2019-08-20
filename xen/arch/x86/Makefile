@@ -230,12 +230,12 @@ $(BASEDIR)/include/asm-x86/asm-macros.h: asm-macros.i Makefile
 	$(call move-if-changed,$@.new,$@)
 
 xen.lds: xen.lds.S
-	$(CC) -P -E -Ui386 $(filter-out -Wa$(comma)%,$(AFLAGS)) -o $@ $<
+	$(CC) -P -E -Ui386 -D__LINKER_SCRIPT__ $(filter-out -Wa$(comma)%,$(AFLAGS)) -o $@ $<
 	sed -e 's/.*\.lds\.o:/$(@F):/g' <.$(@F).d >.$(@F).d.new
 	mv -f .$(@F).d.new .$(@F).d
 
 efi.lds: xen.lds.S
-	$(CC) -P -E -Ui386 -DEFI $(filter-out -Wa$(comma)%,$(AFLAGS)) -o $@ $<
+	$(CC) -P -E -Ui386 -D__LINKER_SCRIPT__ -DEFI $(filter-out -Wa$(comma)%,$(AFLAGS)) -o $@ $<
 	sed -e 's/.*\.lds\.o:/$(@F):/g' <.$(@F).d >.$(@F).d.new
 	mv -f .$(@F).d.new .$(@F).d
 
