@@ -118,7 +118,7 @@ unsigned long get_stack_trace_bottom(unsigned long sp);
 unsigned long get_stack_dump_bottom (unsigned long sp);
 
 #ifdef CONFIG_LIVEPATCH
-# define CHECK_FOR_LIVEPATCH_WORK "call check_for_livepatch_work;"
+# define CHECK_FOR_LIVEPATCH_WORK "call check_for_livepatch_work; endbr64;"
 #else
 # define CHECK_FOR_LIVEPATCH_WORK ""
 #endif

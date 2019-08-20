@@ -6,6 +6,7 @@
 #include <asm/percpu.h>
 #undef ENTRY
 #undef ALIGN
+#undef CFI_LABEL
 
 #ifdef EFI
 

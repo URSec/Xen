@@ -49,14 +49,28 @@
 
 /* Linkage for x86 */
 #ifdef __ASSEMBLY__
-#define ALIGN .align 16,0x90
+#define ALIGN .align 32,0x90
+#define CFI_LABEL endbr64
 #define ENTRY(name)                             \
   .globl name;                                  \
   ALIGN;                                        \
-  name:
+  name:                                         \
+  CFI_LABEL
 #define GLOBAL(name)                            \
   .globl name;                                  \
   name:
+#ifndef __LINKER_SCRIPT__
+.bundle_align_mode 5
+
+.macro cfi_call args:vararg
+.bundle_lock align_to_end
+call \args
+.bundle_unlock
+CFI_LABEL
+.endm
+
+#define call cfi_call
+#endif
 #endif
 
 #define NR_hypercalls 64

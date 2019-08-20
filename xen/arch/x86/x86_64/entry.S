@@ -600,7 +600,7 @@ ENTRY(common_interrupt)
 
         CR4_PV32_RESTORE
         movq %rsp,%rdi
-        callq do_IRQ
+        call  do_IRQ
         mov   %r15, STACK_CPUINFO_FIELD(xen_cr3)(%r14)
         mov   %bl, STACK_CPUINFO_FIELD(use_pv_cr3)(%r14)
         jmp ret_from_intr

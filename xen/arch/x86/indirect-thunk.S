@@ -12,7 +12,7 @@
 #include <asm/asm_defns.h>
 
 .macro IND_THUNK_RETPOLINE reg:req
-        call 2f
+        callq 2f
 1:
         lfence
         jmp 1b

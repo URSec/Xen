@@ -74,7 +74,7 @@ identity_mapped:
 
 call_64_bit:
         /* Call the image entry point.  This should never return. */
-        callq   *%rbp
+        call   *%rbp
         ud2
 
 call_32_bit:
