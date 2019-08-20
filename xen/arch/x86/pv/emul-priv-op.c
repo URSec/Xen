@@ -72,30 +72,33 @@ static io_emul_stub_t *io_emul_stub_setup(struct priv_op_ctxt *ctxt, u8 opcode,
         ctxt->io_emul_stub =
             map_domain_page(_mfn(this_stubs->mfn)) + (stub_va & ~PAGE_MASK);
 
+    /* Put a CFI label in the stub. */
+    *(uint32_t*)&ctxt->io_emul_stub[0] = 0xfa1e0ff3U;
+
     /* call host_to_guest_gpr_switch */
-    ctxt->io_emul_stub[0] = 0xe8;
+    ctxt->io_emul_stub[4] = 0xe8;
     disp = (long)host_to_guest_gpr_switch - (stub_va + 5);
     BUG_ON((int32_t)disp != disp);
-    *(int32_t *)&ctxt->io_emul_stub[1] = disp;
+    *(int32_t *)&ctxt->io_emul_stub[5] = disp;
 
     if ( unlikely(ioemul_handle_quirk) )
-        use_quirk_stub = ioemul_handle_quirk(opcode, &ctxt->io_emul_stub[5],
+        use_quirk_stub = ioemul_handle_quirk(opcode, &ctxt->io_emul_stub[9],
                                              ctxt->ctxt.regs);
 
     if ( !use_quirk_stub )
     {
         /* data16 or nop */
-        ctxt->io_emul_stub[5] = (bytes != 2) ? 0x90 : 0x66;
+        ctxt->io_emul_stub[9] = (bytes != 2) ? 0x90 : 0x66;
         /* <io-access opcode> */
-        ctxt->io_emul_stub[6] = opcode;
+        ctxt->io_emul_stub[10] = opcode;
         /* imm8 or nop */
-        ctxt->io_emul_stub[7] = !(opcode & 8) ? port : 0x90;
+        ctxt->io_emul_stub[11] = !(opcode & 8) ? port : 0x90;
         /* ret (jumps to guest_to_host_gpr_switch) */
-        ctxt->io_emul_stub[8] = 0xc3;
+        ctxt->io_emul_stub[12] = 0xc3;
     }
 
-    BUILD_BUG_ON(STUB_BUF_SIZE / 2 < MAX(9, /* Default emul stub */
-                                         5 + IOEMUL_QUIRK_STUB_BYTES));
+    BUILD_BUG_ON(STUB_BUF_SIZE / 2 < MAX(13, /* Default emul stub */
+                                         9 + IOEMUL_QUIRK_STUB_BYTES));
 
     /* Handy function-typed pointer to the stub. */
     return (void *)stub_va;
