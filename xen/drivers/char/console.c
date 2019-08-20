@@ -1351,6 +1351,10 @@ void panic(const char *fmt, ...)
         machine_restart(5000);
 }
 
+void noreturn abort(void) {
+    BUG();
+}
+
 /*
  * **************************************************************
  * ****************** Console suspend/resume ********************
