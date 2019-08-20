@@ -4,6 +4,7 @@
 #ifdef __ASSEMBLY__
 #include <asm/alternative-asm.h>
 #else
+#include <asm/target-features.h>
 #include <xen/stringify.h>
 #include <xen/types.h>
 #include <asm/asm-macros.h>
@@ -72,6 +73,8 @@ extern void alternative_instructions(void);
 #define ALTINSTR_REPLACEMENT(newinstr, num)       /* replacement */     \
         alt_repl_s(num)":\n\t" newinstr "\n" alt_repl_e(num) ":\n\t"
 
+#ifdef XEN_GENERIC_BUILD
+
 /* alternative assembly primitive: */
 #define ALTERNATIVE(oldinstr, newinstr, feature)                        \
         OLDINSTR_1(oldinstr, 1)                                         \
@@ -97,6 +100,24 @@ extern void alternative_instructions(void);
         ALTINSTR_REPLACEMENT(newinstr1, 1)                              \
         ALTINSTR_REPLACEMENT(newinstr2, 2)                              \
         ".popsection\n"
+
+#else /* XEN_GENERIC_BUILD */
+
+#define _GLUE(x, y) x ## y
+#define GLUE(x, y) _GLUE(x, y)
+
+#define ALT_IF_0(newinstr, oldinstr) oldinstr
+#define ALT_IF_1(newinstr, oldinstr) newinstr
+
+#define ALT_IF(cond, newinstr, oldinstr) GLUE(ALT_IF_, cond)(newinstr, oldinstr)
+
+#define ALTERNATIVE(oldinstr, newinstr, feature)                        \
+        ALT_IF(GLUE(_XEN_TARGET_HAS_, feature), newinstr, oldinstr)
+
+#define ALTERNATIVE_2(oldinstr, newinstr1, feature1, newinstr2, feature2) \
+        ALTERNATIVE(ALTERNATIVE(oldinstr, newinstr1, feature1), newinstr2, feature2)
+
+#endif /* XEN_GENERIC_BUILD */
 
 /*
  * Alternative instructions for different CPU types or capabilities.

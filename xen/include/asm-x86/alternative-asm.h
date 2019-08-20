@@ -1,9 +1,12 @@
 #ifndef _ASM_X86_ALTERNATIVE_ASM_H_
 #define _ASM_X86_ALTERNATIVE_ASM_H_
 
+#include <asm/target-features.h>
 #include <asm/nops.h>
 
 #ifdef __ASSEMBLY__
+
+#ifdef XEN_GENERIC_BUILD
 
 /*
  * Issue one struct alt_instr descriptor entry (need to put it into
@@ -111,6 +114,25 @@
 #undef decl_orig
 #undef as_true
 
+#else /* XEN_GENERIC_BUILD */
+.macro ALTERNATIVE oldinstr, newinstr, feature
+    .if XEN_TARGET_HAS_\feature
+        \newinstr
+    .else
+        \oldinstr
+    .endif
+.endm
+
+.macro ALTERNATIVE_2 oldinstr, newinstr1, feature1, newinstr2, feature2
+    .if XEN_TARGET_HAS_\feature2
+        \newinstr2
+    .elseif XEN_TARGET_HAS_\feature1
+        \newinstr1
+    .else
+        \oldinstr
+    .endif
+.endm
+#endif /* XEN_GENERIC_BUILD */
 #endif /* __ASSEMBLY__ */
 #endif /* _ASM_X86_ALTERNATIVE_ASM_H_ */
 
