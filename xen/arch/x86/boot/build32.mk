@@ -31,7 +31,7 @@ CFLAGS := $(filter-out -flto,$(CFLAGS))
 	$(LD) $(LDFLAGS_DIRECT) -N -T build32.lds -o $@ $<
 
 %.o: %.c
-	$(CC) $(CFLAGS) -c -fpic $< -o $@
+	$(CC) $(filter-out -sva -fsva% -fno-sva%,$(CFLAGS)) -c -fpic $< -o $@
 
 cmdline.o: cmdline.c $(CMDLINE_DEPS)
 
