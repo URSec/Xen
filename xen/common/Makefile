@@ -57,6 +57,7 @@ obj-y += tasklet.o
 obj-y += time.o
 obj-y += timer.o
 obj-y += trace.o
+obj-y += trigger-cfi-failure.o
 obj-y += version.o
 obj-y += virtual_region.o
 obj-y += vm_event.o

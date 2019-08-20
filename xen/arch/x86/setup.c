@@ -54,6 +54,7 @@
 #include <asm/cpuid.h>
 #include <asm/spec_ctrl.h>
 #include <asm/guest.h>
+#include <xen/trigger-cfi-failure.h>
 
 /* opt_nosmp: If true, secondary processors are ignored. */
 static bool __initdata opt_nosmp;
@@ -1818,6 +1819,9 @@ void __init noreturn __start_xen(unsigned long mbi_p)
         barrier();
         wrmsrl(MSR_SPEC_CTRL, default_xen_spec_ctrl);
     }
+
+    /* For testing CFI */
+    maybe_do_cfi_crash();
 
     /* Jump to the 1:1 virtual mappings of cpu0_stack. */
     asm volatile ("mov %[stk], %%rsp; jmp %c[fn]" ::
