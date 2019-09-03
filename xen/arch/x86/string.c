@@ -12,9 +12,9 @@ void *(memcpy)(void *dest, const void *src, size_t n)
     long d0, d1, d2;
 
     asm volatile (
-        "   rep ; movs"__OS" ; "
+        "   rep movs"__OS"   ; "
         "   mov %k4,%k3      ; "
-        "   rep ; movsb        "
+        "   rep movsb          "
         : "=&c" (d0), "=&D" (d1), "=&S" (d2)
         : "0" (n/BYTES_PER_LONG), "r" (n%BYTES_PER_LONG), "1" (dest), "2" (src)
         : "memory" );

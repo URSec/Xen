@@ -9,7 +9,7 @@ unsigned int __find_first_bit(
 
     asm volatile (
         "1: xor %%eax,%%eax\n\t" /* also ensures ZF==1 if size==0 */
-        "   repe; scas"__OS"\n\t"
+        "   repe scas"__OS"\n\t"
         "   je 2f\n\t"
         "   bsf -"STR(BITS_PER_LONG/8)"(%2),%0\n\t"
         "   jz 1b\n\t"
@@ -58,11 +58,11 @@ unsigned int __find_first_zero_bit(
     asm volatile (
         "1: xor %%eax,%%eax ; not %3\n\t" /* rAX == ~0ul */
         "   xor %%edx,%%edx\n\t" /* also ensures ZF==1 if size==0 */
-        "   repe; scas"__OS"\n\t"
+        "   repe scas"__OS"\n\t"
         "   je 2f\n\t"
         "   xor -"STR(BITS_PER_LONG/8)"(%2),%3\n\t"
         "   jz 1b\n\t"
-        "   rep; bsf %3,%0\n\t"
+        "   tzcnt %3,%0\n\t"
         "   lea -"STR(BITS_PER_LONG/8)"(%2),%2\n\t"
         "2: sub %%ebx,%%edi\n\t"
         "   shl $3,%%edi\n\t"

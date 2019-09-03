@@ -476,7 +476,7 @@ extern void write_ptbase(struct vcpu *v);
 /* REP NOP (PAUSE) is a good thing to insert into busy-wait loops. */
 static always_inline void rep_nop(void)
 {
-    asm volatile ( "rep;nop" : : : "memory" );
+    asm volatile ( "pause" : : : "memory" );
 }
 
 #define cpu_relax() rep_nop()

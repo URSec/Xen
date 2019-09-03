@@ -327,7 +327,7 @@ static always_inline unsigned int __scanbit(unsigned long val, unsigned int max)
 {
     if ( __builtin_constant_p(max) && max == BITS_PER_LONG )
         alternative_io("bsf %[in],%[out]; cmovz %[max],%k[out]",
-                       "rep; bsf %[in],%[out]",
+                       "tzcnt %[in],%[out]",
                        X86_FEATURE_BMI1,
                        [out] "=&r" (val),
                        [in] "r" (val), [max] "r" (max));
@@ -409,7 +409,7 @@ static always_inline unsigned int __scanbit(unsigned long val, unsigned int max)
  */
 static inline unsigned int find_first_set_bit(unsigned long word)
 {
-    asm ( "rep; bsf %1,%0" : "=r" (word) : "rm" (word) );
+    asm ( "tzcnt %1,%0" : "=r" (word) : "rm" (word) );
     return (unsigned int)word;
 }
 
