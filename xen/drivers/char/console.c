@@ -1355,6 +1355,10 @@ void noreturn abort(void) {
     BUG();
 }
 
+void sva_check_buffer(uintptr_t _buf, size_t _size) {
+    // Always succeed
+}
+
 /*
  * **************************************************************
  * ****************** Console suspend/resume ********************
