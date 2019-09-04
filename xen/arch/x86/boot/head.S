@@ -396,9 +396,8 @@ __pvh_start:
         mov     $0x1000, %esp
 
         /* Calculate the load base address. */
-        .bundle_lock
         calll   1f
-1:      .bundle_unlock
+1:
         pop     %esi
         sub     $sym_offs(1b), %esi
 
@@ -445,9 +444,8 @@ __start:
         mov     $0x1000, %esp
 
         /* Calculate the load base address. */
-        .bundle_lock
         calll   1f
-1:      .bundle_unlock
+1:
         pop     %esi
         sub     $sym_offs(1b), %esi
 

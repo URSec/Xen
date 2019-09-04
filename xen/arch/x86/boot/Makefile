@@ -9,6 +9,7 @@ RELOC_DEPS = $(DEFS_H_DEPS) $(BASEDIR)/include/xen/multiboot.h \
 	     $(BASEDIR)/include/public/arch-x86/hvm/start_info.h
 
 head.o: cmdline.S reloc.S
+head.o: AFLAGS += -DBOOTCODE=1
 
 cmdline.S: cmdline.c $(CMDLINE_DEPS)
 	$(MAKE) -f build32.mk $@ CMDLINE_DEPS="$(CMDLINE_DEPS)"

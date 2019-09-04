@@ -59,7 +59,7 @@
 #define GLOBAL(name)                            \
   .globl name;                                  \
   name:
-#ifndef __LINKER_SCRIPT__
+#if !defined(__LINKER_SCRIPT__) && !defined(BOOTCODE)
 .bundle_align_mode 5
 
 .macro cfi_call args:vararg
