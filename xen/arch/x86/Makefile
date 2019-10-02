@@ -6,6 +6,7 @@ subdir-$(CONFIG_HVM) += hvm
 subdir-y += mm
 subdir-$(CONFIG_XENOPROF) += oprofile
 subdir-$(CONFIG_PV) += pv
+subdir-$(CONFIG_SVA) += sva
 subdir-y += x86_64
 
 alternative-y := alternative.init.o
@@ -79,6 +80,10 @@ efi-y := $(shell if [ ! -r $(BASEDIR)/include/xen/compile.h -o \
                       -O $(BASEDIR)/include/xen/compile.h ]; then \
                          echo '$(TARGET).efi'; fi)
 
+ifeq ($(CONFIG_SVA),y)
+LDLIBS += -lsva
+endif
+
 ifneq ($(build_id_linker),)
 notes_phdrs = --notes
 else
@@ -108,23 +113,23 @@ ALL_OBJS := $(BASEDIR)/arch/x86/boot/built_in.o $(BASEDIR)/arch/x86/efi/built_in
 ifeq ($(CONFIG_LTO),y)
 # Gather all LTO objects together
 prelink_lto.o: $(ALL_OBJS)
-	$(LD_LTO) -r -o $@ $^
+	$(LD_LTO) -r -o $@ $^ $(LDLIBS)
 
 prelink-efi_lto.o: $(ALL_OBJS) efi/runtime.o efi/compat.o
-	$(guard) $(LD_LTO) -r -o $@ $(filter-out %/efi/built_in.o,$^)
+	$(guard) $(LD_LTO) -r -o $@ $(filter-out %/efi/built_in.o,$^) $(LDLIBS)
 
 # Link it with all the binary objects
 prelink.o: $(patsubst %/built_in.o,%/built_in_bin.o,$(ALL_OBJS)) prelink_lto.o
-	$(LD) $(LDFLAGS) -r -o $@ $^
+	$(LD) $(LDFLAGS) -r -o $@ $^ $(LDLIBS)
 
 prelink-efi.o: $(patsubst %/built_in.o,%/built_in_bin.o,$(ALL_OBJS)) prelink-efi_lto.o efi/boot.init.o
-	$(guard) $(LD) $(LDFLAGS) -r -o $@ $^
+	$(guard) $(LD) $(LDFLAGS) -r -o $@ $^ $(LDLIBS)
 else
 prelink.o: $(ALL_OBJS)
-	$(LD) $(LDFLAGS) -r -o $@ $^
+	$(LD) $(LDFLAGS) -r -o $@ $^ $(LDLIBS)
 
 prelink-efi.o: $(ALL_OBJS) efi/boot.init.o efi/runtime.o efi/compat.o
-	$(guard) $(LD) $(LDFLAGS) -r -o $@ $(filter-out %/efi/built_in.o,$^)
+	$(guard) $(LD) $(LDFLAGS) -r -o $@ $(filter-out %/efi/built_in.o,$^) $(LDLIBS)
 endif
 
 $(TARGET)-syms: prelink.o xen.lds
