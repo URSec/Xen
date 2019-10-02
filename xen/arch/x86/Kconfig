@@ -176,6 +176,15 @@ config PV_SHIM_EXCLUSIVE
 	  firmware, and will not function correctly in other scenarios.
 
 	  If unsure, say N.
+
+config SVA
+	def_bool n
+	prompt "Shade (SVA)"
+	---help---
+	  Builds Xen to target Shade, the VMX extentions to Virtual Ghost and
+	  the Secure Virtual Architecture (SVA).
+
+	  If unsure, say N.
 endmenu
 
 source "common/Kconfig"
