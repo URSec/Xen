@@ -30,7 +30,7 @@ CONFIG_$(XEN_OS) := y
 SHELL     ?= /bin/sh
 
 # Tools to run on system hosting the build
-HOSTCFLAGS  = -Wall -Werror -Wstrict-prototypes -O2 -fomit-frame-pointer
+HOSTCFLAGS  = -Wall -Werror -O2 -fomit-frame-pointer
 HOSTCFLAGS += -fno-strict-aliasing
 
 DISTDIR     ?= $(XEN_ROOT)/dist
@@ -217,7 +217,7 @@ CFLAGS += -fno-strict-aliasing
 
 CFLAGS += -std=gnu99
 
-CFLAGS += -Wall -Wstrict-prototypes
+CFLAGS += -Wall
 
 $(call cc-option-add,HOSTCFLAGS,HOSTCC,-Wdeclaration-after-statement)
 $(call cc-option-add,CFLAGS,CC,-Wdeclaration-after-statement)
