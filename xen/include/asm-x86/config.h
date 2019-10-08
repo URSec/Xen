@@ -286,7 +286,13 @@ extern unsigned char boot_edid_info[128];
 #define __HYPERVISOR_DS32 0xe010
 #define __HYPERVISOR_DS   __HYPERVISOR_DS64
 
+/*
+ * SVA creates symbols that have an offset of more than 4GB from
+ * __XEN_VIRT_START
+ */
+#ifndef CONFIG_SVA
 #define SYMBOLS_ORIGIN XEN_VIRT_START
+#endif
 
 /* For generic assembly code: use macros to define operation/operand sizes. */
 #define __OS          "q"  /* Operation Suffix */
