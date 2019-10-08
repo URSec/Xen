@@ -24,7 +24,7 @@ ENTRY(efi_start)
 #define SECTION_ALIGN PAGE_SIZE
 #define DECL_SECTION(x) x : AT(ADDR(x) - __XEN_VIRT_START)
 
-ENTRY(start_pa)
+ENTRY(start) /* ELF start address is expected to be virtual address, not physical */
 
 #endif /* EFI */
 
@@ -63,8 +63,6 @@ SECTIONS
  */
   __2M_text_start = .;         /* Start of 2M superpages, mapped RX. */
 #endif
-
-  start_pa = ABSOLUTE(start - __XEN_VIRT_START);
 
   . = __XEN_VIRT_START + XEN_IMG_OFFSET;
   _start = .;
