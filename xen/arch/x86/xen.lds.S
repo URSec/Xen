@@ -35,6 +35,11 @@ OUTPUT_ARCH(i386:x86-64)
 PHDRS
 {
   text PT_LOAD ;
+
+  init PT_LOAD ;
+
+  data PT_LOAD ;
+
 #if (defined(BUILD_ID) || defined (CONFIG_PVH_GUEST)) && !defined(EFI)
   note PT_NOTE ;
 #endif
@@ -198,7 +203,7 @@ SECTIONS
 #ifdef EFI /* EFI wants to merge all of .init.*  ELF doesn't. */
        . = ALIGN(SMP_CACHE_BYTES);
 #else
-  } :text
+  } :init
   DECL_SECTION(.init.data) {
 #endif
 
@@ -250,7 +255,7 @@ SECTIONS
        *(SORT(.data.vpci.*))
        __end_vpci_array = .;
 #endif
-  } :text
+  } :init
 
   . = ALIGN(SECTION_ALIGN);
   __init_end = .;
@@ -264,7 +269,7 @@ SECTIONS
        __start_schedulers_array = .;
        *(.data.schedulers)
        __end_schedulers_array = .;
-  } :text
+  } :data
 
   DECL_SECTION(.data) {
        *(.data.page_aligned)
@@ -272,7 +277,7 @@ SECTIONS
        *(.data.rel)
        *(.data.rel.*)
        CONSTRUCTORS
-  } :text
+  } :data
 
   DECL_SECTION(.bss) {
        __bss_start = .;
@@ -287,7 +292,7 @@ SECTIONS
        . = ALIGN(SMP_CACHE_BYTES);
        __per_cpu_data_end = .;
        __bss_end = .;
-  } :text
+  } :data
   _end = . ;
 
   . = ALIGN(SECTION_ALIGN);
@@ -297,12 +302,12 @@ SECTIONS
   . = ALIGN(4);
   .reloc : {
     *(.reloc)
-  } :text
+  } :data
   /* Trick the linker into setting the image size to exactly 16Mb. */
   . = ALIGN(__section_alignment__);
   .pad : {
     . = ALIGN(MB(16));
-  } :text
+  } :data
 #endif
 
 #ifndef XEN_BUILD_EFI
