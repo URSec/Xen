@@ -113,10 +113,10 @@ ALL_OBJS := $(BASEDIR)/arch/x86/boot/built_in.o $(BASEDIR)/arch/x86/efi/built_in
 ifeq ($(CONFIG_LTO),y)
 # Gather all LTO objects together
 prelink_lto.o: $(ALL_OBJS)
-	$(LD_LTO) -r -o $@ $^ $(LDLIBS)
+	$(LD_LTO) -r -o $@ $^
 
 prelink-efi_lto.o: $(ALL_OBJS) efi/runtime.o efi/compat.o
-	$(guard) $(LD_LTO) -r -o $@ $(filter-out %/efi/built_in.o,$^) $(LDLIBS)
+	$(guard) $(LD_LTO) -r -o $@ $(filter-out %/efi/built_in.o,$^)
 
 # Link it with all the binary objects
 prelink.o: $(patsubst %/built_in.o,%/built_in_bin.o,$(ALL_OBJS)) prelink_lto.o
