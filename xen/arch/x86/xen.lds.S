@@ -8,6 +8,8 @@
 #undef ALIGN
 #undef CFI_LABEL
 
+#define SECMEMSTART 0xffff860000000000
+
 #ifdef EFI
 
 #define FORMAT "pei-x86-64"
@@ -43,6 +45,8 @@ PHDRS
 #if (defined(BUILD_ID) || defined (CONFIG_PVH_GUEST)) && !defined(EFI)
   note PT_NOTE ;
 #endif
+
+  svamem PT_NULL ;
 }
 SECTIONS
 {
@@ -312,6 +316,15 @@ SECTIONS
 #ifndef XEN_BUILD_EFI
   efi = .;
 #endif
+
+  /* Secure memory section */
+  ASSERT(. < SECMEMSTART, "Not enough room for secure memory region")
+  . = SECMEMSTART;
+  .sva.data (NOLOAD) : {
+       __start_sva_data = .;
+       *(svamem)
+       __end_sva_data = .;
+  } :svamem
 
   /* Sections to be discarded */
   /DISCARD/ : {
