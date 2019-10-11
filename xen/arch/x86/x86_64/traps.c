@@ -47,9 +47,23 @@ static void read_registers(struct cpu_user_regs *regs, unsigned long crs[8])
     regs->es = read_sreg(es);
     regs->fs = read_sreg(fs);
     regs->gs = read_sreg(gs);
-    crs[5] = rdfsbase();
-    crs[6] = rdgsbase();
-    crs[7] = rdgsshadow();
+
+    /*
+     * SVA uses the fs/gs bases in hypervisor context and modifies the rd*base
+     * functions to modify a value stored in memory. Use the in-memory value if
+     * we were in guest context. If we were in hypervisor context, read the
+     * value currently on the CPU.
+     */
+    if (!IS_ENABLED(CONFIG_SVA) || guest_mode(regs)) {
+        crs[5] = rdfsbase();
+        crs[6] = rdgsbase();
+        crs[7] = rdgsshadow();
+    } else {
+        asm ("rdfsbase %0\n\t"
+             "rdgsbase %1\n\t"
+             : "=r"(crs[5]), "=r"(crs[6]));
+        rdmsrl(MSR_SHADOW_GS_BASE, crs[7]);
+    }
 }
 
 static void _show_registers(
