@@ -72,8 +72,17 @@ struct cpu_info {
      */
     bool         use_pv_cr3;
 
+#ifdef CONFIG_SVA
+    /*
+     * SVA uses the %fs and %gs bases, so we need to store the guest values on
+     * entry to Xen and restore them on exit. */
+    unsigned long guest_fs_base;
+    unsigned long guest_gs_base;
+    unsigned long guest_gs_shadow;
+#else
     unsigned long __pad;
     /* get_stack_bottom() must be 16-byte aligned */
+#endif
 };
 
 static inline struct cpu_info *get_cpu_info(void)

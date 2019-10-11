@@ -13,6 +13,7 @@
 
 #include <asm/asm_defns.h>
 #include <asm/cpufeature.h>
+#include <asm/current.h>
 #include <asm/processor.h>
 
 #define rdmsr(msr,val1,val2) \
@@ -123,6 +124,8 @@ static inline uint64_t rdtsc_ordered(void)
      __asm__ __volatile__("rdpmc" \
 			  : "=a" (low), "=d" (high) \
 			  : "c" (counter))
+
+#ifndef CONFIG_SVA
 
 /*
  * On hardware supporting FSGSBASE, the value loaded into hardware is the
@@ -245,6 +248,51 @@ static inline void swapgs(void)
 {
     asm volatile ("swapgs");
 }
+
+#else /* !CONFIG_SVA */
+
+static inline unsigned long rdfsbase(void)
+{
+    return get_cpu_info()->guest_fs_base;
+}
+
+static inline unsigned long rdgsbase(void)
+{
+    return get_cpu_info()->guest_gs_base;
+}
+
+static inline unsigned long rdgsshadow(void)
+{
+    return get_cpu_info()->guest_gs_shadow;
+}
+
+static inline void wrfsbase(unsigned long base)
+{
+    get_cpu_info()->guest_fs_base = base;
+}
+
+static inline void wrgsbase(unsigned long base)
+{
+    get_cpu_info()->guest_gs_base = base;
+}
+
+static inline void wrgsshadow(unsigned long base)
+{
+    get_cpu_info()->guest_gs_shadow = base;
+}
+
+static inline void swapgs(void)
+{
+    struct cpu_info* cpu_info = get_cpu_info();
+    unsigned long tmp = cpu_info->guest_gs_base;
+    cpu_info->guest_gs_base = cpu_info->guest_gs_shadow;
+    cpu_info->guest_gs_shadow = tmp;
+}
+
+#define __rdfsbase rdfsbase
+#define __rdgsbase rdgsbase
+
+#endif
 
 DECLARE_PER_CPU(uint64_t, efer);
 static inline uint64_t read_efer(void)
