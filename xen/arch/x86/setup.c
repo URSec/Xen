@@ -59,6 +59,7 @@
 #ifdef CONFIG_SVA
 #include <sva/init.h>
 #include <xen-sva/mem.h>
+#include <xen-sva/traps.h>
 #endif
 
 /* opt_nosmp: If true, secondary processors are ignored. */
@@ -1667,6 +1668,8 @@ void __init noreturn __start_xen(unsigned long mbi_p)
     local_irq_disable();
 
     sva_init_primary_xen(&this_cpu(init_tss));
+
+    init_sva_traps();
 
     local_irq_enable();
 
