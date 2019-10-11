@@ -1370,7 +1370,7 @@ static void load_segments(struct vcpu *n)
 
         /* If in kernel mode then switch the GS bases around. */
         if ( (n->arch.flags & TF_kernel_mode) )
-            asm volatile ( "swapgs" );
+            swapgs();
     }
 
     if ( unlikely(!all_segs_okay) )

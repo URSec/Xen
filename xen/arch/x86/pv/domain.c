@@ -402,7 +402,7 @@ void toggle_guest_mode(struct vcpu *v)
         else
             v->arch.pv.gs_base_user = __rdgsbase();
     }
-    asm volatile ( "swapgs" );
+    swapgs();
 
     _toggle_guest_pt(v);
 }

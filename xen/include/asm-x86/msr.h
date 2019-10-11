@@ -241,6 +241,11 @@ static inline void wrgsshadow(unsigned long base)
         wrmsrl(MSR_SHADOW_GS_BASE, base);
 }
 
+static inline void swapgs(void)
+{
+    asm volatile ("swapgs");
+}
+
 DECLARE_PER_CPU(uint64_t, efer);
 static inline uint64_t read_efer(void)
 {
