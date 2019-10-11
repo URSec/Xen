@@ -57,6 +57,7 @@
 #include <xen/trigger-cfi-failure.h>
 
 #ifdef CONFIG_SVA
+#include <sva/init.h>
 #include <xen-sva/mem.h>
 #endif
 
@@ -632,8 +633,10 @@ static void __init noreturn reinit_bsp_stack(void)
 {
     unsigned long *stack = (void*)(get_stack_bottom() & ~(STACK_SIZE - 1));
 
+#ifndef CONFIG_SVA
     /* Update TSS and ISTs */
     load_system_tables();
+#endif
 
     /* Update SYSCALL trampolines */
     percpu_traps_init();
@@ -1649,6 +1652,28 @@ void __init noreturn __start_xen(unsigned long mbi_p)
 
 #ifdef CONFIG_SVA
     map_sva_static_data();
+
+#ifndef NDEBUG
+    printk("Handing off interrupt control to SVA.\n");
+
+    struct __packed {
+        uint16_t limit;
+        uint64_t base;
+    } idt;
+    asm ("sidt %0" : "=m"(idt));
+    printk("IDT before handoff: %p\n", (void*)idt.base);
+#endif
+
+    local_irq_disable();
+
+    sva_init_primary_xen(&this_cpu(init_tss));
+
+    local_irq_enable();
+
+#ifndef NDEBUG
+    asm ("sidt %0" : "=m"(idt));
+    printk("IDT after handoff: %p\n", (void*)idt.base);
+#endif
 #endif
 
     smp_prepare_cpus();
