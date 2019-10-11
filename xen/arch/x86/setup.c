@@ -56,6 +56,10 @@
 #include <asm/guest.h>
 #include <xen/trigger-cfi-failure.h>
 
+#ifdef CONFIG_SVA
+#include <xen-sva/mem.h>
+#endif
+
 /* opt_nosmp: If true, secondary processors are ignored. */
 static bool __initdata opt_nosmp;
 boolean_param("nosmp", opt_nosmp);
@@ -1642,6 +1646,10 @@ void __init noreturn __start_xen(unsigned long mbi_p)
     early_msi_init();
 
     iommu_setup();    /* setup iommu if available */
+
+#ifdef CONFIG_SVA
+    map_sva_static_data();
+#endif
 
     smp_prepare_cpus();
 
