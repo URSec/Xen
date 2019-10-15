@@ -8,7 +8,9 @@
 #undef ALIGN
 #undef CFI_LABEL
 
-#define SECMEMSTART 0xffff860000000000
+#ifdef CONFIG_SVA
+#include <sva/secmem.h>
+#endif
 
 #ifdef EFI
 
