@@ -1652,6 +1652,10 @@ void __init noreturn __start_xen(unsigned long mbi_p)
     iommu_setup();    /* setup iommu if available */
 
 #ifdef CONFIG_SVA
+    wrfsbase(0);
+    wrgsbase(0);
+    wrgsshadow(0);
+
     map_sva_static_data();
 
 #ifndef NDEBUG
