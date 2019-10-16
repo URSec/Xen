@@ -102,11 +102,15 @@ static void _ret_from_intr_sva(struct cpu_user_regs *regs)
 
     if (guest_mode(regs)) {
         while (true) {
+            local_irq_disable();
+
             if (softirq_pending(smp_processor_id())) {
+                local_irq_enable();
                 do_softirq();
                 continue;
             }
             if (curr->arch.pv.trap_bounce.flags & TBF_EXCEPTION) {
+                local_irq_enable();
                 // TODO
                 BUG();
             }
