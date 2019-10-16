@@ -637,10 +637,12 @@ static void __init noreturn reinit_bsp_stack(void)
 #ifndef CONFIG_SVA
     /* Update TSS and ISTs */
     load_system_tables();
-#endif
 
     /* Update SYSCALL trampolines */
     percpu_traps_init();
+#else
+    this_cpu(init_tss).rsp0 = (uintptr_t)get_cpu_info();
+#endif
 
     stack_base[0] = stack;
     memguard_guard_stack(stack);
