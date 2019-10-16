@@ -435,7 +435,7 @@ static s64 __init init_pmtimer(struct platform_timesource *pts)
 
     count = inl(pmtmr_ioport) & mask;
     start = rdtsc_ordered();
-    target = count + CALIBRATE_VALUE(ACPI_PM_FREQUENCY);
+    target = count + CALIBRATE_VALUE(ACPI_PM_FREQUENCY) & mask;
     if ( target < count )
         while ( (inl(pmtmr_ioport) & mask) >= count )
             continue;
