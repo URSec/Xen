@@ -1671,7 +1671,15 @@ void __init noreturn __start_xen(unsigned long mbi_p)
 
     local_irq_disable();
 
-    sva_init_primary_xen(&this_cpu(init_tss));
+    /*
+     * SVA will use the address in tss.rsp0 as the bottom of the stack when it
+     * calls our exception handlers. Make sure that the stack doesn't overlap
+     * with the guest registers.
+     */
+    struct tss_struct *tss = &this_cpu(init_tss);
+    tss->rsp0 = (uintptr_t)get_cpu_info();
+
+    sva_init_primary_xen(tss);
 
     init_sva_traps();
 
