@@ -25,6 +25,9 @@ asm ( "\t.equ CONFIG_INDIRECT_THUNK, "
 
 #ifndef __ASSEMBLY__
 void ret_from_intr(void);
+#ifdef CONFIG_SVA
+void ret_from_intr_sva(void);
+#endif
 #endif
 
 #ifndef NDEBUG

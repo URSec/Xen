@@ -126,6 +126,8 @@ static inline struct cpu_info *get_cpu_info(void)
 unsigned long get_stack_trace_bottom(unsigned long sp);
 unsigned long get_stack_dump_bottom (unsigned long sp);
 
+#ifndef CONFIG_SVA
+
 #ifdef CONFIG_LIVEPATCH
 # define CHECK_FOR_LIVEPATCH_WORK "call check_for_livepatch_work; endbr64;"
 #else
@@ -141,6 +143,17 @@ unsigned long get_stack_dump_bottom (unsigned long sp);
             : : "r" (guest_cpu_user_regs()), "i" (__fn) : "memory" );   \
         unreachable();                                                  \
     })
+
+#else
+
+static inline void noreturn reset_stack_and_jump(void(*fn)(void)) {
+    extern void noreturn sva_reinit_stack(void (*func)(void));
+
+    // TODO: check for livepatch work
+    sva_reinit_stack(fn);
+}
+
+#endif
 
 /*
  * Which VCPU's state is currently running on each CPU?
