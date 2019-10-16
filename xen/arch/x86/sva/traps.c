@@ -25,6 +25,7 @@
 #include <asm/current.h>
 #include <asm/irq.h>
 #include <asm/processor.h>
+#include <asm/regs.h>
 
 #include <sva/interrupt.h>
 #include <sva/state.h>
@@ -51,7 +52,7 @@ void copy_regs_from_sva(struct cpu_user_regs *regs)
 
 void copy_regs_to_sva(struct cpu_user_regs *regs)
 {
-    if (sva_was_privileged()) {
+    if (!guest_mode(regs)) {
         sva_icontext(regs, NULL, NULL);
     } else {
         struct cpu_info *cpu_info = get_cpu_info();
@@ -99,7 +100,7 @@ static void _ret_from_intr_sva(struct cpu_user_regs *regs)
 {
     struct vcpu *curr = current;
 
-    if (!sva_was_privileged()) {
+    if (guest_mode(regs)) {
         while (true) {
             if (softirq_pending(smp_processor_id())) {
                 do_softirq();
