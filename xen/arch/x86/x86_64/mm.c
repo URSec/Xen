@@ -1053,6 +1053,7 @@ long do_set_segment_base(unsigned int which, unsigned long base)
         break;
 
     case SEGBASE_GS_USER_SEL:
+#ifndef CONFIG_SVA
         __asm__ __volatile__ (
             "     swapgs              \n"
             "1:   movl %k0,%%gs       \n"
@@ -1063,6 +1064,10 @@ long do_set_segment_base(unsigned int which, unsigned long base)
             ".previous                \n"
             _ASM_EXTABLE(1b, 2b)
             : "+r" (base) );
+#else
+        /* SVA doesn't handle this (yet) */
+        BUG();
+#endif
         break;
 
     default:
