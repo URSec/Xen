@@ -17,12 +17,14 @@
  * along with this program; If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <xen/guest_access.h>
 #include <xen/init.h>
 #include <xen/lib.h>
 #include <xen/sched.h>
 #include <xen/shared.h>
 #include <xen/softirq.h>
 #include <asm/current.h>
+#include <asm/domain.h>
 #include <asm/hypercall.h>
 #include <asm/irq.h>
 #include <asm/processor.h>
@@ -31,6 +33,13 @@
 #include <sva/interrupt.h>
 #include <sva/state.h>
 
+/* Hacky; we should make a builtin for this */
+#define current_rip() ({                                    \
+    uintptr_t __rip;                                        \
+    asm volatile ("leaq 1f(%%rip), %0; 1:" : "=r"(__rip));  \
+    __rip;                                                  \
+})
+
 extern void sva_cpu_user_regs(struct cpu_user_regs *regs,
                               unsigned long *fs_base,
                               unsigned long *gs_base);
@@ -38,6 +47,8 @@ extern void sva_icontext(struct cpu_user_regs *regs,
                               unsigned long *fs_base,
                               unsigned long *gs_base);
 
+static void make_bounce_frame(struct cpu_user_regs *regs, struct vcpu *curr,
+                              struct trap_bounce *tb);
 static void test_events(struct cpu_user_regs *regs, struct vcpu *curr);
 static void _ret_from_intr_sva(struct cpu_user_regs *regs);
 
@@ -116,6 +127,100 @@ void sva_syscall(void)
     _ret_from_intr_sva(guest_cpu_user_regs());
 }
 
+static void store_guest_stack(uintptr_t rsp, void *val, size_t size) {
+    if (unlikely(copy_to_user((void*)rsp, val, size) != 0)) {
+        clac();
+        show_page_walk(rsp);
+        asm_domain_crash_synchronous(current_rip());
+    }
+}
+
+static void make_bounce_frame(struct cpu_user_regs *regs, struct vcpu *curr,
+                              struct trap_bounce *tb)
+{
+    struct bounce_frame {
+        uint64_t rcx;
+        uint64_t r11;
+        uint64_t error_code;
+        uint64_t rip;
+        uint16_t cs;
+        uint16_t _pad;
+        uint32_t saved_upcall_mask;
+        uint64_t rflags;
+        uint64_t rsp;
+        uint64_t ss;
+    };
+
+    uintptr_t guest_rsp;
+    uint16_t guest_cs = regs->cs;
+
+    if (curr->arch.flags & TF_kernel_mode) {
+        guest_rsp = regs->rsp;
+        guest_cs &= ~0x3;
+    } else {
+        toggle_guest_mode(curr);
+        guest_rsp = curr->arch.pv.kernel_sp;
+    }
+    guest_rsp &= ~0xfUL; // Align the stack
+
+    if (unlikely(HYPERVISOR_VIRT_START < guest_rsp &&
+                 guest_rsp < HYPERVISOR_VIRT_END + sizeof(struct bounce_frame)))
+    {
+        asm_domain_crash_synchronous(current_rip());
+    }
+
+    struct bounce_frame bf = {
+        .rcx = regs->rcx,
+        .r11 = regs->r11,
+        .error_code = tb->flags & TBF_EXCEPTION_ERRCODE ? tb->error_code : 0,
+        .rip = regs->rip,
+        .cs = guest_cs,
+        ._pad = 0,
+        .saved_upcall_mask = vcpu_info(curr, evtchn_upcall_mask),
+        .rflags = regs->rflags & ~(X86_EFLAGS_IF|X86_EFLAGS_IOPL),
+        .rsp = regs->rsp,
+        .ss = regs->ss,
+    };
+
+    bf.rflags |= !vcpu_info(curr, evtchn_upcall_mask) ? X86_EFLAGS_IF : 0;
+    bf.rflags |= VM_ASSIST(curr->domain, architectural_iopl) ? curr->arch.pv.iopl : 0;
+
+    vcpu_info(curr, evtchn_upcall_mask) |= !!(tb->flags & TBF_INTERRUPT);
+
+#define STORE_GUEST_STACK(val) do {                         \
+        guest_rsp -= sizeof(val);                           \
+        store_guest_stack(guest_rsp, &(val), sizeof(val));   \
+    } while (0)
+
+    stac();
+    STORE_GUEST_STACK(bf.ss);
+    STORE_GUEST_STACK(bf.rsp);
+    STORE_GUEST_STACK(bf.rflags);
+    STORE_GUEST_STACK(bf.saved_upcall_mask);
+    //guest_rsp -= sizeof(bf._pad); // No need to store padding
+    STORE_GUEST_STACK(bf._pad);
+    STORE_GUEST_STACK(bf.cs);
+    STORE_GUEST_STACK(bf.rip);
+    if (tb->flags & TBF_EXCEPTION_ERRCODE) {
+        STORE_GUEST_STACK(bf.error_code);
+    }
+    STORE_GUEST_STACK(bf.r11);
+    STORE_GUEST_STACK(bf.rcx);
+    clac();
+
+#undef STORE_GUEST_STACK
+
+    regs->entry_vector |= TRAP_syscall;
+    regs->eflags &= ~(X86_EFLAGS_AC | X86_EFLAGS_VM | X86_EFLAGS_RF |
+                      X86_EFLAGS_NT | X86_EFLAGS_TF);
+    regs->ss = FLAT_KERNEL_SS;
+    regs->rsp = guest_rsp;
+    if (unlikely(tb->eip == 0)) {
+        asm_domain_crash_synchronous(current_rip());
+    }
+    regs->rip = tb->eip;
+}
+
 static void test_events(struct cpu_user_regs *regs, struct vcpu *curr)
 {
     local_irq_disable();
@@ -125,11 +230,15 @@ static void test_events(struct cpu_user_regs *regs, struct vcpu *curr)
         do_softirq();
         return test_events(regs, curr);
     }
-    if (curr->arch.pv.trap_bounce.flags & TBF_EXCEPTION) {
+
+    struct trap_bounce *tb = &curr->arch.pv.trap_bounce;
+    if (tb->flags & TBF_EXCEPTION) {
         local_irq_enable();
-        // TODO
-        BUG();
+        make_bounce_frame(regs, curr, tb);
+        tb->flags = 0;
+        return test_events(regs, curr);
     }
+
     if (curr->mce_pending) {
         // TODO
         BUG();
