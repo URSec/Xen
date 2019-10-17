@@ -37,6 +37,7 @@ extern void sva_icontext(struct cpu_user_regs *regs,
                               unsigned long *fs_base,
                               unsigned long *gs_base);
 
+static void test_events(struct cpu_user_regs *regs, struct vcpu *curr);
 static void _ret_from_intr_sva(struct cpu_user_regs *regs);
 
 void copy_regs_from_sva(struct cpu_user_regs *regs)
@@ -105,46 +106,43 @@ void sva_syscall(void)
     BUG();
 }
 
+static void test_events(struct cpu_user_regs *regs, struct vcpu *curr)
+{
+    local_irq_disable();
+
+    if (softirq_pending(smp_processor_id())) {
+        local_irq_enable();
+        do_softirq();
+        test_events(regs, curr);
+    }
+    if (curr->arch.pv.trap_bounce.flags & TBF_EXCEPTION) {
+        local_irq_enable();
+        // TODO
+        BUG();
+    }
+    if (curr->mce_pending) {
+        // TODO
+        BUG();
+    }
+    if (curr->nmi_pending) {
+        // TODO
+        BUG();
+    }
+
+    if (vcpu_info(curr, evtchn_upcall_pending) &&
+        !vcpu_info(curr, evtchn_upcall_mask))
+    {
+        // TODO
+        BUG();
+    }
+}
+
 static void _ret_from_intr_sva(struct cpu_user_regs *regs)
 {
     struct vcpu *curr = current;
 
     if (guest_mode(regs)) {
-        while (true) {
-            local_irq_disable();
-
-            if (softirq_pending(smp_processor_id())) {
-                local_irq_enable();
-                do_softirq();
-                continue;
-            }
-            if (curr->arch.pv.trap_bounce.flags & TBF_EXCEPTION) {
-                local_irq_enable();
-                // TODO
-                BUG();
-            }
-            if (curr->mce_pending) {
-                // TODO
-                BUG();
-            }
-            if (curr->nmi_pending) {
-                // TODO
-                BUG();
-            }
-            /*
-             * NB: I have no idea why the check is done this way instead of 
-             * evtchn_upcall_pending == 0, but it's what Xen does in the native
-             * path, so we'll do the same here.
-             */
-            if (vcpu_info(curr, evtchn_upcall_pending) &&
-                !vcpu_info(curr, evtchn_upcall_mask))
-            {
-                // TODO
-                BUG();
-            }
-
-            break;
-        }
+        test_events(regs, curr);
 
         if (get_cpu_info()->pv_cr3 != 0) {
             BUG();
