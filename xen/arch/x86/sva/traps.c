@@ -64,30 +64,39 @@ void do_trap_sva_shim(unsigned int vector)
 {
     ASSERT(vector < 32 && vector != 14);
 
-    struct cpu_user_regs regs;
-    copy_regs_from_sva(&regs);
-    exception_table[vector](&regs);
-    _ret_from_intr_sva(&regs);
+    struct cpu_user_regs _regs;
+    struct cpu_user_regs *regs =
+        sva_was_privileged() ? &_regs : guest_cpu_user_regs();
+
+    copy_regs_from_sva(regs);
+    exception_table[vector](regs);
+    _ret_from_intr_sva(regs);
 }
 
 void do_page_fault_sva_shim(unsigned int vector, void *fault_addr)
 {
     ASSERT(vector == 14);
 
-    struct cpu_user_regs regs;
-    copy_regs_from_sva(&regs);
-    exception_table[vector](&regs);
-    _ret_from_intr_sva(&regs);
+    struct cpu_user_regs _regs;
+    struct cpu_user_regs *regs =
+        sva_was_privileged() ? &_regs : guest_cpu_user_regs();
+
+    copy_regs_from_sva(regs);
+    exception_table[vector](regs);
+    _ret_from_intr_sva(regs);
 }
 
 void do_intr_sva_shim(unsigned int vector)
 {
     ASSERT(vector >= 32 && vector < 256);
 
-    struct cpu_user_regs regs;
-    copy_regs_from_sva(&regs);
-    do_IRQ(&regs);
-    _ret_from_intr_sva(&regs);
+    struct cpu_user_regs _regs;
+    struct cpu_user_regs *regs =
+        sva_was_privileged() ? &_regs : guest_cpu_user_regs();
+
+    copy_regs_from_sva(regs);
+    do_IRQ(regs);
+    _ret_from_intr_sva(regs);
 }
 
 void sva_syscall(void)
