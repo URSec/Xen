@@ -123,7 +123,7 @@ static void test_events(struct cpu_user_regs *regs, struct vcpu *curr)
     if (softirq_pending(smp_processor_id())) {
         local_irq_enable();
         do_softirq();
-        test_events(regs, curr);
+        return test_events(regs, curr);
     }
     if (curr->arch.pv.trap_bounce.flags & TBF_EXCEPTION) {
         local_irq_enable();
