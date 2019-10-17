@@ -23,6 +23,7 @@
 #include <xen/shared.h>
 #include <xen/softirq.h>
 #include <asm/current.h>
+#include <asm/hypercall.h>
 #include <asm/irq.h>
 #include <asm/processor.h>
 #include <asm/regs.h>
@@ -56,6 +57,7 @@ void copy_regs_to_sva(struct cpu_user_regs *regs)
     if (!guest_mode(regs)) {
         sva_icontext(regs, NULL, NULL);
     } else {
+        ASSERT((regs->ss & ~0x3) != 0);
         struct cpu_info *cpu_info = get_cpu_info();
         sva_icontext(regs, &cpu_info->guest_fs_base, &cpu_info->guest_gs_base);
     }
@@ -102,8 +104,16 @@ void do_intr_sva_shim(unsigned int vector)
 
 void sva_syscall(void)
 {
-    // TODO
-    BUG();
+    local_irq_enable();
+
+    copy_regs_from_sva(guest_cpu_user_regs());
+    if (current->arch.flags & TF_kernel_mode) {
+        pv_hypercall(guest_cpu_user_regs());
+    } else {
+        // TODO
+        BUG();
+    }
+    _ret_from_intr_sva(guest_cpu_user_regs());
 }
 
 static void test_events(struct cpu_user_regs *regs, struct vcpu *curr)
