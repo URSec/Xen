@@ -83,6 +83,7 @@ void do_trap_sva_shim(unsigned int vector)
         sva_was_privileged() ? &_regs : guest_cpu_user_regs();
 
     copy_regs_from_sva(regs);
+    local_irq_enable();
     exception_table[vector](regs);
     _ret_from_intr_sva(regs);
 }
@@ -96,6 +97,7 @@ void do_page_fault_sva_shim(unsigned int vector, void *fault_addr)
         sva_was_privileged() ? &_regs : guest_cpu_user_regs();
 
     copy_regs_from_sva(regs);
+    local_irq_enable();
     exception_table[vector](regs);
     _ret_from_intr_sva(regs);
 }
