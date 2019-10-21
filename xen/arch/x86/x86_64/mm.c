@@ -1052,7 +1052,7 @@ long do_set_segment_base(unsigned int which, unsigned long base)
             ret = -EINVAL;
         break;
 
-    case SEGBASE_GS_USER_SEL:
+    case SEGBASE_GS_USER_SEL: {
 #ifndef CONFIG_SVA
         __asm__ __volatile__ (
             "     swapgs              \n"
@@ -1065,10 +1065,28 @@ long do_set_segment_base(unsigned int which, unsigned long base)
             _ASM_EXTABLE(1b, 2b)
             : "+r" (base) );
 #else
-        /* SVA doesn't handle this (yet) */
-        BUG();
+        uintptr_t saved_gsbase;
+        uintptr_t user_gsbase;
+        unsigned long flags;
+
+        local_irq_save(flags);
+        asm volatile (
+            "     rdgsbase %1         \n"
+            "1:   movl %k0, %%gs      \n"
+            "     rdgsbase %2         \n"
+            "     wrgsbase %1         \n"
+            "     mfence              \n"
+            ".section .fixup, \"ax\"  \n"
+            "2:   xorl %k0, %k0       \n"
+            "     jmp 1b              \n"
+            ".previous                \n"
+            _ASM_EXTABLE(1b, 2b)
+            : "+r" (base), "=&r" (saved_gsbase), "=r"(user_gsbase));
+        local_irq_restore(flags);
+        wrgsshadow(user_gsbase);
 #endif
         break;
+    }
 
     default:
         ret = -EINVAL;
