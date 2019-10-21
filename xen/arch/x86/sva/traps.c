@@ -252,8 +252,11 @@ static void test_events(struct cpu_user_regs *regs, struct vcpu *curr)
     if (vcpu_info(curr, evtchn_upcall_pending) &&
         !vcpu_info(curr, evtchn_upcall_mask))
     {
-        // TODO
-        BUG();
+        local_irq_enable();
+        tb->eip = curr->arch.pv.event_callback_eip;
+        tb->flags = TBF_INTERRUPT;
+        make_bounce_frame(regs, curr, tb);
+        return test_events(regs, curr);
     }
 }
 
