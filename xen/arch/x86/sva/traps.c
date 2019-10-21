@@ -189,7 +189,7 @@ static void make_bounce_frame(struct cpu_user_regs *regs, struct vcpu *curr,
 
 #define STORE_GUEST_STACK(val) do {                         \
         guest_rsp -= sizeof(val);                           \
-        store_guest_stack(guest_rsp, &(val), sizeof(val));   \
+        store_guest_stack(guest_rsp, &(val), sizeof(val));  \
     } while (0)
 
     stac();
@@ -215,6 +215,7 @@ static void make_bounce_frame(struct cpu_user_regs *regs, struct vcpu *curr,
                       X86_EFLAGS_NT | X86_EFLAGS_TF);
     regs->ss = FLAT_KERNEL_SS;
     regs->rsp = guest_rsp;
+    regs->cs = FLAT_KERNEL_CS;
     if (unlikely(tb->eip == 0)) {
         asm_domain_crash_synchronous(current_rip());
     }
