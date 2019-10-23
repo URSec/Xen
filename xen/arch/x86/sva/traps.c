@@ -117,16 +117,34 @@ void do_intr_sva_shim(unsigned int vector)
 
 void sva_syscall(void)
 {
+    struct vcpu *curr = current;
+    struct cpu_user_regs *regs = guest_cpu_user_regs();
+
     local_irq_enable();
 
-    copy_regs_from_sva(guest_cpu_user_regs());
-    if (current->arch.flags & TF_kernel_mode) {
-        pv_hypercall(guest_cpu_user_regs());
+    copy_regs_from_sva(regs);
+    if (curr->arch.flags & TF_kernel_mode) {
+        pv_hypercall(regs);
     } else {
-        // TODO
-        BUG();
+        struct trap_bounce *tb = &curr->arch.pv.trap_bounce;
+
+        if (regs->cs == FLAT_USER_CS32 &&
+            curr->arch.pv.syscall32_callback_eip != 0)
+        {
+            tb->eip = curr->arch.pv.syscall32_callback_eip;
+        } else {
+            tb->eip = curr->arch.pv.syscall_callback_eip;
+        }
+        if (curr->arch.vgc_flags & VGCF_syscall_disables_events) {
+            tb->flags = TBF_INTERRUPT;
+        } else {
+            tb->flags = 0;
+        }
+
+        make_bounce_frame(regs, curr, tb);
+        regs->eflags &= ~X86_EFLAGS_DF;
     }
-    _ret_from_intr_sva(guest_cpu_user_regs());
+    _ret_from_intr_sva(regs);
 }
 
 static void store_guest_stack(uintptr_t rsp, void *val, size_t size) {
