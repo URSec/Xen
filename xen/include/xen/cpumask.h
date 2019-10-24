@@ -392,7 +392,7 @@ static inline void free_cpumask_var(cpumask_var_t mask)
 	     (cpu) = cpumask_next(cpu, mask))
 #else /* NR_CPUS == 1 */
 #define for_each_cpu(cpu, mask)			\
-	for ((cpu) = 0; (cpu) < 1; (cpu)++, (void)(mask))
+	for ((cpu) = 0; (cpu) < 1 && cpumask_test_cpu((cpu), (mask)); (cpu)++)
 #endif /* NR_CPUS */
 
 /*
