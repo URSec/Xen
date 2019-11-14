@@ -41,6 +41,7 @@
 #include <asm/spec_ctrl.h>
 #include <asm/tboot.h>
 #include <asm/apic.h>
+#include <sva/vmx_intrinsics.h>
 
 static bool_t __read_mostly opt_vpid_enabled = 1;
 boolean_param("vpid", opt_vpid_enabled);
@@ -650,6 +651,24 @@ int _vmx_cpu_up(bool bsp)
     if ( bsp && (rc = vmx_cpu_up_prepare(cpu)) != 0 )
         return rc;
 
+#ifdef CONFIG_SVA
+    /*
+     * Initialize SVA's VMX support. This will issue VMXON to enable VMX
+     * support on the CPU.
+     */
+    unsigned char retval = sva_initvmx();
+
+    /*
+     * If SVA's VMX support failed to initialize, report that VMX is
+     * unavailable to Xen.
+     */
+    if (!retval)
+    {
+        printk("CPU%d: Failed to initialize SVA's VMX support "
+               "(sva_initvmx() returned false). Disabling VMX.\n", cpu);
+        return -EINVAL;
+    }
+#else /* non-SVA case (!#ifdef CONFIG_SVA) */
     switch ( __vmxon(this_cpu(vmxon_region)) )
     {
     case -2: /* #UD or #GP */
@@ -674,6 +693,7 @@ int _vmx_cpu_up(bool bsp)
     default:
         BUG();
     }
+#endif /* end else (!#ifdef CONFIG_SVA) */
 
     hvm_asid_init(cpu_has_vmx_vpid ? (1u << VMCS_VPID_WIDTH) : 0);
 
@@ -695,6 +715,17 @@ int vmx_cpu_up()
 
 void vmx_cpu_down(void)
 {
+#ifdef CONFIG_SVA
+    printk("Xen called vmx_cpu_down() to issue VMXOFF, which SVA doesn't "
+           "currently support. vmx_cpu_down() will continue but skip the "
+           "call to Xen's VMXOFF assembly. If this is happening during "
+           "system shutdown, this is harmless. If it's happening at any "
+           "other time, you should pay closer attention (but it's probably "
+           "still harmless because Xen will just call sva_initvmx() again "
+           "when it wants to bring the CPU back up; SVA will detect that "
+           "VMX was already initialized and not try to re-issue VMXON).\n"
+#endif /* end #ifdef CONFIG_SVA */
+
     struct list_head *active_vmcs_list = &this_cpu(active_vmcs_list);
     unsigned long flags;
 
@@ -709,7 +740,9 @@ void vmx_cpu_down(void)
 
     BUG_ON(!(read_cr4() & X86_CR4_VMXE));
     this_cpu(vmxon) = 0;
+#ifndef CONFIG_SVA
     __vmxoff();
+#endif
 
     local_irq_restore(flags);
 }
