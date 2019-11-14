@@ -34,13 +34,59 @@ unsigned char __used SVAPTPages[1024][PAGE_SIZE] __attribute__((section("svamem"
 
 uintptr_t provideSVAMemory(size_t size)
 {
-    // TODO
-    return (uintptr_t)NULL;
+    /*
+     * For now, we only support SVA requesting a single 4 kB page of memory
+     * at a time from Xen. (This is in line with the FreeBSD port and how SVA
+     * is currently written to utilize this callback function.)
+     */
+    if (size != 4096)
+        panic("SVA: provideSVAMemory() only supports working with a single "
+              "4 kB page of memory at a time. (Attempted to request %ld B.)\n",
+              size);
+
+    /*
+     * Get a page of anonymous (not accounted to a particular domain) memory
+     * from Xen's domain heap.
+     *
+     * This page will not be mapped anywhere except in Xen's direct map (and
+     * of course SVA's direct map, once we set that up).
+     */
+    struct page_info *pg = alloc_domheap_page(NULL, 0);
+
+    /*
+     * TODO: remove the page from Xen's direct map. (SVA's MMU checks will
+     * verify this to keep Xen honest.)
+     *
+     * We're not doing this at the moment because we don't yet have SVA's
+     * DMAP working in the Xen port.
+     */
+
+    /* Return the physical address of the page. */
+    return page_to_maddr(pg);
 }
 
 void releaseSVAMemory(uintptr_t addr, size_t size)
 {
-    // TODO
+    /*
+     * For now, we only support SVA requesting a single 4 kB page of memory
+     * at a time from Xen. (This is in line with the FreeBSD port and how SVA
+     * is currently written to utilize this callback function.)
+     */
+    if (size != 4096)
+        panic("SVA: releaseSVAMemory() only supports working with a single "
+              "4 kB page of memory at a time. (Attempted to free %ld B.)\n",
+              size);
+
+    /*
+     * TODO: add the page back to Xen's direct map.
+     *
+     * We're not doing this at the moment because we don't yet have SVA's
+     * DMAP working in the Xen port, and thus provideSVAMemory() isn't
+     * removing pages from Xen's DMAP in the first place.
+     */
+
+    /* Return the page to Xen's domain heap. */
+    free_domheap_page(maddr_to_page(addr));
 }
 
 void __init map_sva_static_data(void)
