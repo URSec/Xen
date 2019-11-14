@@ -723,7 +723,7 @@ void vmx_cpu_down(void)
            "other time, you should pay closer attention (but it's probably "
            "still harmless because Xen will just call sva_initvmx() again "
            "when it wants to bring the CPU back up; SVA will detect that "
-           "VMX was already initialized and not try to re-issue VMXON).\n"
+           "VMX was already initialized and not try to re-issue VMXON).\n");
 #endif /* end #ifdef CONFIG_SVA */
 
     struct list_head *active_vmcs_list = &this_cpu(active_vmcs_list);
