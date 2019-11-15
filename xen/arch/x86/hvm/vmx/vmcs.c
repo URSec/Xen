@@ -482,6 +482,25 @@ static int vmx_init_vmcs_config(void)
 
 static paddr_t vmx_alloc_vmcs(void)
 {
+#ifdef CONFIG_SVA
+    /*
+     * Ask SVA to create a new VM. This allocates a VMCS and initializes
+     * SVA's metadata structures for the VM.
+     *
+     * For now, we pass null pointers for initial VMCS controls, initial VM
+     * state, and initial extended page table root pointer. Those will be
+     * filled in later as we continue porting Xen and have it put more of the
+     * VM life-cycle in SVA's hands.
+     */
+    int sva_vmid = sva_allocvm(NULL, NULL, NULL);
+
+    if (sva_vmid <= 0)
+        panic("Xen vmx_alloc_vmcs(): sva_allocvm() returned %d (failure).\n",
+              sva_vmid);
+
+    paddr_t vmcs_paddr = sva_get_vmcs_paddr(sva_vmid);
+    return vmcs_paddr;
+#else /* non-SVA case (!#ifdef CONFIG_SVA) */
     struct page_info *pg;
     struct vmcs_struct *vmcs;
 
@@ -497,11 +516,30 @@ static paddr_t vmx_alloc_vmcs(void)
     unmap_domain_page(vmcs);
 
     return page_to_maddr(pg);
+#endif /* end else (!#ifdef CONFIG_SVA) */
 }
 
 static void vmx_free_vmcs(paddr_t pa)
 {
+#ifdef CONFIG_SVA
+    /* Find the SVA numeric ID corresponding to this VMCS. */
+    int sva_vmid = sva_get_vmid_from_vmcs(pa);
+
+    if (sva_vmid <= 0)
+        panic("Xen vmx_free_vmcs(): got return value %d while asking SVA to "
+              "look up the VMID corresponding to the VMCS at physical "
+              "address 0x%lx. This means SVA doesn't know of any VM "
+              "corresponding to this VMCS, which shouldn't happen.\n",
+              sva_vmid, pa);
+
+    /*
+     * Ask SVA to free the VM. This returns the VMCS to the secure memory
+     * frame cache and clears SVA's metadata structures for this VM.
+     */
+    sva_freevm(sva_vmid);
+#else /* non-SVA case (!#ifdef CONFIG_SVA) */
     free_domheap_page(maddr_to_page(pa));
+#endif /* end else (!#ifdef CONFIG_SVA) */
 }
 
 static void __vmx_clear_vmcs(void *info)
@@ -579,6 +617,14 @@ int vmx_cpu_up_prepare(unsigned int cpu)
     if ( nvmx_cpu_up_prepare(cpu) != 0 )
         printk("CPU%d: Could not allocate virtual VMCS buffer.\n", cpu);
 
+#ifdef CONFIG_SVA
+    /*
+     * There is no need for Xen to allocate a VMXON region in the SVA config,
+     * because SVA will take care of that itself when sva_initvmx() is called
+     * (by Xen's _vmx_cpu_up()). So we'll just return 0.
+     */
+    return 0;
+#else /* non-SVA case (!#ifdef CONFIG_SVA) */
     if ( per_cpu(vmxon_region, cpu) )
         return 0;
 
@@ -589,12 +635,20 @@ int vmx_cpu_up_prepare(unsigned int cpu)
     printk("CPU%d: Could not allocate host VMCS\n", cpu);
     nvmx_cpu_dead(cpu);
     return -ENOMEM;
+#endif /* end else (!#ifdef CONFIG_SVA) */
 }
 
 void vmx_cpu_dead(unsigned int cpu)
 {
+    /*
+     * In the SVA config, Xen does not manage the VMXON region and there's
+     * nothing to free here.
+     */
+#ifndef CONFIG_SVA
     vmx_free_vmcs(per_cpu(vmxon_region, cpu));
     per_cpu(vmxon_region, cpu) = 0;
+#endif
+
     nvmx_cpu_dead(cpu);
     vmx_pi_desc_fixup(cpu);
 }
