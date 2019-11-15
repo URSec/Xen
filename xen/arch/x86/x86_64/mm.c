@@ -678,9 +678,16 @@ void __init paging_init(void)
 
     machine_to_phys_mapping_valid = 1;
 
+#ifdef CONFIG_SVA
+    /* SVA doesn't use linear mappings. */
+    l4e_write(&idle_pg_table[l4_table_offset(LINEAR_PT_VIRT_START)],
+              l4e_empty());
+#else
     /* Set up linear page table mapping. */
     l4e_write(&idle_pg_table[l4_table_offset(LINEAR_PT_VIRT_START)],
               l4e_from_paddr(__pa(idle_pg_table), __PAGE_HYPERVISOR_RW));
+#endif
+
     return;
 
  nomem:

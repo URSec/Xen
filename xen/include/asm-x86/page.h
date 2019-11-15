@@ -276,6 +276,7 @@ void copy_page_sse2(void *, const void *);
 
 #endif /* !defined(__ASSEMBLY__) */
 
+#ifndef CONFIG_SVA
 /* Where to find each level of the linear mapping */
 #define __linear_l1_table ((l1_pgentry_t *)(LINEAR_PT_VIRT_START))
 #define __linear_l2_table \
@@ -284,7 +285,7 @@ void copy_page_sse2(void *, const void *);
  ((l3_pgentry_t *)(__linear_l2_table + l2_linear_offset(LINEAR_PT_VIRT_START)))
 #define __linear_l4_table \
  ((l4_pgentry_t *)(__linear_l3_table + l3_linear_offset(LINEAR_PT_VIRT_START)))
-
+#endif /* !CONFIG_SVA */
 
 #ifndef __ASSEMBLY__
 extern root_pgentry_t idle_pg_table[ROOT_PAGETABLE_ENTRIES];

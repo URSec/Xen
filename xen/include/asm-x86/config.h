@@ -139,8 +139,13 @@ extern unsigned char boot_edid_info[128];
  *    Reserved for future shared info with the guest OS (GUEST ACCESSIBLE).
  *  0xffff808000000000 - 0xffff80ffffffffff [512GB, 2^39 bytes, PML4:257]
  *    ioremap for PCI mmconfig space
+#ifndef CONFIG_SVA
  *  0xffff810000000000 - 0xffff817fffffffff [512GB, 2^39 bytes, PML4:258]
  *    Guest linear page table.
+#else
+ *  0xffff810000000000 - 0xffff817fffffffff [512GB, 2^39 bytes, PML4:258]
+ *    Reserved for future use.
+#endif
  *  0xffff818000000000 - 0xffff81ffffffffff [512GB, 2^39 bytes, PML4:259]
  *    Shadow linear page table.
  *  0xffff820000000000 - 0xffff827fffffffff [512GB, 2^39 bytes, PML4:260]
@@ -207,9 +212,13 @@ extern unsigned char boot_edid_info[128];
  */
 #define PCI_MCFG_VIRT_START     (PML4_ADDR(257))
 #define PCI_MCFG_VIRT_END       (PCI_MCFG_VIRT_START + PML4_ENTRY_BYTES)
+
 /* Slot 258: linear page table (guest table). */
+/* NB: These are unused with CONFIG_SVA, but we keep the virtual address macros
+ * around for convienience. */
 #define LINEAR_PT_VIRT_START    (PML4_ADDR(258))
 #define LINEAR_PT_VIRT_END      (LINEAR_PT_VIRT_START + PML4_ENTRY_BYTES)
+
 /* Slot 259: linear page table (shadow table). */
 #define SH_LINEAR_PT_VIRT_START (PML4_ADDR(259))
 #define SH_LINEAR_PT_VIRT_END   (SH_LINEAR_PT_VIRT_START + PML4_ENTRY_BYTES)

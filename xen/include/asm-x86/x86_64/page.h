@@ -99,11 +99,13 @@ typedef l4_pgentry_t root_pgentry_t;
 #define pte_write_atomic(ptep, pte) write_atomic(ptep, pte)
 #define pte_write(ptep, pte)        write_atomic(ptep, pte)
 
+#ifndef CONFIG_SVA
 /* Given a virtual address, get an entry offset into a linear page table. */
 #define l1_linear_offset(_a) (((_a) & VADDR_MASK) >> L1_PAGETABLE_SHIFT)
 #define l2_linear_offset(_a) (((_a) & VADDR_MASK) >> L2_PAGETABLE_SHIFT)
 #define l3_linear_offset(_a) (((_a) & VADDR_MASK) >> L3_PAGETABLE_SHIFT)
 #define l4_linear_offset(_a) (((_a) & VADDR_MASK) >> L4_PAGETABLE_SHIFT)
+#endif /* !CONFIG_SVA */
 
 #define is_guest_l2_slot(_d, _t, _s)                   \
     ( !is_pv_32bit_domain(_d) ||                       \

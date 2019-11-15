@@ -1,6 +1,10 @@
 #ifndef __PV_MM_H__
 #define __PV_MM_H__
 
+#ifdef CONFIG_SVA
+#include <xen-sva/mem.h>
+#endif
+
 l1_pgentry_t *map_guest_l1e(unsigned long linear, mfn_t *gl1mfn);
 
 int new_guest_cr3(mfn_t mfn);
@@ -15,7 +19,11 @@ static inline l1_pgentry_t guest_get_eff_l1e(unsigned long linear)
 
     if ( unlikely(!__addr_ok(linear)) ||
          __copy_from_user(&l1e,
+#ifdef CONFIG_SVA
+                          (l1_pgentry_t*)get_page_table_entry_sva(linear, 1),
+#else
                           &__linear_l1_table[l1_linear_offset(linear)],
+#endif
                           sizeof(l1_pgentry_t)) )
         l1e = l1e_empty();
 

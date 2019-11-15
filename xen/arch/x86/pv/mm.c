@@ -42,7 +42,11 @@ l1_pgentry_t *map_guest_l1e(unsigned long linear, mfn_t *gl1mfn)
 
     /* Find this l1e and its enclosing l1mfn in the linear map. */
     if ( __copy_from_user(&l2e,
+#ifdef CONFIG_SVA
+                          (l2_pgentry_t*)get_page_table_entry_sva(linear, 2),
+#else
                           &__linear_l2_table[l2_linear_offset(linear)],
+#endif
                           sizeof(l2_pgentry_t)) )
         return NULL;
 

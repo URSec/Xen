@@ -1684,9 +1684,14 @@ void init_xen_l4_slots(l4_pgentry_t *l4t, mfn_t l4mfn,
         idle_pg_table[l4_table_offset(PCI_MCFG_VIRT_START)];
 
     /* Slot 258: Self linear mappings. */
+#ifdef CONFIG_SVA
+    /* SVA doesn't use linear mappings */
+    l4t[l4_table_offset(LINEAR_PT_VIRT_START)] = l4e_empty();
+#else
     ASSERT(!mfn_eq(l4mfn, INVALID_MFN));
     l4t[l4_table_offset(LINEAR_PT_VIRT_START)] =
         l4e_from_mfn(l4mfn, __PAGE_HYPERVISOR_RW);
+#endif
 
     /* Slot 259: Shadow linear mappings (if applicable) .*/
     l4t[l4_table_offset(SH_LINEAR_PT_VIRT_START)] =
