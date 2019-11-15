@@ -25,4 +25,12 @@
  */
 void __init map_sva_static_data(void);
 
+/**
+ * Get a pointer to a virtual address's page table entry
+ *
+ * @param virt_addr The virtual address for which to look up page table entries
+ * @param level     The level of the page table which contains the entry (1-4)
+ */
+void *get_page_table_entry_sva(uintptr_t virt_addr, int level);
+
 #endif /* _XEN_SVA_MEM_H */

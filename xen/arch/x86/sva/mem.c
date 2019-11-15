@@ -24,6 +24,7 @@
 #include <asm/page.h>
 
 #include <sva/callbacks.h>
+#include <sva/mmu_intrinsics.h>
 
 #define SUPERPAGE_SIZE (1UL << SUPERPAGE_SHIFT)
 #define SUPERPAGE_MASK (~(SUPERPAGE_SIZE - 1))
@@ -87,6 +88,21 @@ void releaseSVAMemory(uintptr_t addr, size_t size)
 
     /* Return the page to Xen's domain heap. */
     free_domheap_page(maddr_to_page(addr));
+}
+
+void *get_page_table_entry_sva(uintptr_t virt_addr, int level) {
+    switch (level) {
+    case 1:
+        return sva_get_l1_entry(virt_addr);
+    case 2:
+        return sva_get_l2_entry(virt_addr);
+    case 3:
+        return sva_get_l3_entry(virt_addr);
+    case 4:
+        return sva_get_l4_entry(virt_addr);
+    default:
+        BUG();
+    }
 }
 
 void __init map_sva_static_data(void)
