@@ -17,6 +17,66 @@
 #include <asm/flushtlb.h>
 #include <asm/hardirq.h>
 #include <asm/setup.h>
+#ifdef CONFIG_SVA
+#include <xen-sva/mem.h>
+#endif
+
+#undef virt_to_mfn
+#define virt_to_mfn(v) _mfn(__virt_to_mfn(v))
+
+#ifdef CONFIG_SVA
+/*
+ * We need to get rid of all the linear page table stuff. For now, just return
+ * addresses from the direct map, which should be big enough for our use cases.
+ */
+
+void __init mapcache_override_current(struct vcpu *v)
+{
+    // Nothing to do
+}
+
+void *map_domain_page(mfn_t mfn)
+{
+    BUG_ON(mfn_x(mfn) >= PFN_DOWN(__pa(SECMEMSTART)));
+    return mfn_to_virt(mfn_x(mfn));
+}
+
+void unmap_domain_page(const void *ptr)
+{
+    ASSERT((uintptr_t)ptr >= DIRECTMAP_VIRT_START &&
+           (uintptr_t)ptr < SECMEMSTART);
+    // No need to do anything: page is in the direct map
+}
+
+int mapcache_domain_init(struct domain *d)
+{
+    // Nothing to do
+    return 0;
+}
+
+int mapcache_vcpu_init(struct vcpu *v)
+{
+    // Nothing to do
+    return 0;
+}
+
+void *map_domain_page_global(mfn_t mfn)
+{
+    return map_domain_page(mfn);
+}
+
+void unmap_domain_page_global(const void *ptr)
+{
+    return unmap_domain_page(ptr);
+}
+
+/* Translate a map-domain-page'd address to the underlying MFN */
+mfn_t domain_page_map_to_mfn(const void *ptr)
+{
+    return virt_to_mfn((uintptr_t)ptr);
+}
+
+#else /* CONFIG_SVA */
 
 static DEFINE_PER_CPU(struct vcpu *, override);
 
@@ -351,3 +411,5 @@ mfn_t domain_page_map_to_mfn(const void *ptr)
 
     return l1e_get_mfn(*pl1e);
 }
+
+#endif /* CONFIG_SVA */
