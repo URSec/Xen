@@ -20,10 +20,17 @@
 #ifndef _XEN_SVA_MEM_H
 #define _XEN_SVA_MEM_H
 
+#include <sva/secmem.h>
+
 /**
  * Map SVA's static data into the secure memory area
  */
 void __init map_sva_static_data(void);
+
+/**
+ * Hand off control of the MMU to SVA
+ */
+void __init init_sva_mmu(void);
 
 /**
  * Get a pointer to a virtual address's page table entry

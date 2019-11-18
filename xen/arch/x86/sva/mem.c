@@ -133,3 +133,8 @@ void __init map_sva_static_data(void)
         BUG_ON(err);
     }
 }
+
+void __init init_sva_mmu(void)
+{
+    sva_mmu_init();
+}

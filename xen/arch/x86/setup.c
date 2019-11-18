@@ -1691,6 +1691,12 @@ void __init noreturn __start_xen(unsigned long mbi_p)
     asm ("sidt %0" : "=m"(idt));
     printk("IDT after handoff: %p\n", (void*)idt.base);
 #endif
+
+#ifndef NDEBUG
+    printk("Handing off MMU control to SVA\n");
+#endif
+
+    init_sva_mmu();
 #endif
 
     smp_prepare_cpus();
