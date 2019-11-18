@@ -33,6 +33,8 @@
 /* The FreeBSD port alloctated this in the linker script. Reason? */
 unsigned char __used SVAPTPages[1024][PAGE_SIZE] __attribute__((section("svamem")));
 
+extern char __init_begin[], _sinittext[], _einittext[], __init_end[];
+
 uintptr_t provideSVAMemory(size_t size)
 {
     /*
@@ -136,5 +138,13 @@ void __init map_sva_static_data(void)
 
 void __init init_sva_mmu(void)
 {
+    // Remove W+X mappings of init code and data
+    modify_xen_mappings((uintptr_t)_sinittext,
+                        ROUNDUP((uintptr_t)_einittext, PAGE_SIZE),
+                        PAGE_HYPERVISOR_RX);
+    modify_xen_mappings(ROUNDUP((uintptr_t)_einittext, PAGE_SIZE),
+                        ROUNDUP((uintptr_t)__init_end, PAGE_SIZE),
+                        PAGE_HYPERVISOR_RW);
+
     sva_mmu_init();
 }

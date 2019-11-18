@@ -607,6 +607,12 @@ static void noinline init_done(void)
     unregister_init_virtual_region();
 
     /* Zero the .init code and data. */
+#ifdef CONFIG_SVA
+    // SVA made our init code unwritable, so we need to make it writable again
+    // (and not executable).
+    modify_xen_mappings((uintptr_t)__init_begin, (uintptr_t)__init_end,
+                        PAGE_HYPERVISOR_RW);
+#endif
     for ( va = __init_begin; va < _p(__init_end); va += PAGE_SIZE )
         clear_page(va);
 

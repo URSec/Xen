@@ -211,6 +211,8 @@ SECTIONS
   DECL_SECTION(.init.data) {
 #endif
 
+       . = ALIGN(PAGE_SIZE);
+
        *(.init.rodata)
        *(.init.rodata.rel)
        *(.init.rodata.str*)
