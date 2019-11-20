@@ -139,12 +139,12 @@ void __init map_sva_static_data(void)
 void __init init_sva_mmu(void)
 {
     // Remove W+X mappings of init code and data
-    modify_xen_mappings((uintptr_t)_sinittext,
-                        ROUNDUP((uintptr_t)_einittext, PAGE_SIZE),
-                        PAGE_HYPERVISOR_RX);
-    modify_xen_mappings(ROUNDUP((uintptr_t)_einittext, PAGE_SIZE),
-                        ROUNDUP((uintptr_t)__init_end, PAGE_SIZE),
-                        PAGE_HYPERVISOR_RW);
+    BUG_ON(modify_xen_mappings((uintptr_t)_sinittext,
+                               ROUNDUP((uintptr_t)_einittext, PAGE_SIZE),
+                               PAGE_HYPERVISOR_RX));
+    BUG_ON(modify_xen_mappings(ROUNDUP((uintptr_t)_einittext, PAGE_SIZE),
+                               ROUNDUP((uintptr_t)__init_end, PAGE_SIZE),
+                               PAGE_HYPERVISOR_RW));
 
     sva_mmu_init();
 }
