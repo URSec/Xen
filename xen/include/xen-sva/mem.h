@@ -20,6 +20,9 @@
 #ifndef _XEN_SVA_MEM_H
 #define _XEN_SVA_MEM_H
 
+#include <xen/init.h>
+#include <xen/types.h>
+
 #include <sva/secmem.h>
 
 /**
