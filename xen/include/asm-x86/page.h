@@ -18,6 +18,9 @@
 #ifndef __ASSEMBLY__
 # include <asm/types.h>
 # include <xen/lib.h>
+#ifdef CONFIG_SVA
+#include <sva/mmu_intrinsics.h>
+#endif
 #endif
 
 #include <asm/x86_64/page.h>
@@ -31,6 +34,28 @@
     l3e_from_intpte(pte_read_atomic(&l3e_get_intpte(*(l3ep))))
 #define l4e_read_atomic(l4ep) \
     l4e_from_intpte(pte_read_atomic(&l4e_get_intpte(*(l4ep))))
+
+#ifdef CONFIG_SVA
+
+#define l1e_write_atomic(l1ep, l1e) \
+    sva_update_l1_mapping((pte_t*)l1ep, l1e_get_intpte(l1e))
+#define l2e_write_atomic(l2ep, l2e) \
+    sva_update_l2_mapping((pde_t*)l2ep, l2e_get_intpte(l2e))
+#define l3e_write_atomic(l3ep, l3e) \
+    sva_update_l3_mapping((pdpte_t*)l3ep, l3e_get_intpte(l3e))
+#define l4e_write_atomic(l4ep, l4e) \
+    sva_update_l4_mapping((pml4e_t*)l4ep, l4e_get_intpte(l4e))
+
+#define l1e_write(l1ep, l1e) \
+    l1e_write_atomic(l1ep, l1e)
+#define l2e_write(l2ep, l2e) \
+    l2e_write_atomic(l2ep, l2e)
+#define l3e_write(l3ep, l3e) \
+    l3e_write_atomic(l3ep, l3e)
+#define l4e_write(l4ep, l4e) \
+    l4e_write_atomic(l4ep, l4e)
+
+#else /* CONFIG_SVA */
 
 /* Write a pte atomically to memory. */
 #define l1e_write_atomic(l1ep, l1e) \
@@ -54,6 +79,8 @@
     pte_write(&l3e_get_intpte(*(l3ep)), l3e_get_intpte(l3e))
 #define l4e_write(l4ep, l4e) \
     pte_write(&l4e_get_intpte(*(l4ep)), l4e_get_intpte(l4e))
+
+#endif /* CONFIG_SVA */
 
 /* Get direct integer representation of a pte's contents (intpte_t). */
 #define l1e_get_intpte(x)          ((x).l1)
