@@ -381,7 +381,7 @@ void __init arch_init_memory(void)
             ASSERT(root_pgt_pv_xen_slots < ROOT_PAGETABLE_PV_XEN_SLOTS);
             if ( l4_table_offset(split_va) == l4_table_offset(split_va - 1) )
             {
-                l3_pgentry_t *l3tab = alloc_xen_pagetable();
+                l3_pgentry_t *l3tab = alloc_xen_l3_pagetable();
 
                 if ( l3tab )
                 {
@@ -4918,7 +4918,7 @@ static l3_pgentry_t *virt_to_xen_l3e(unsigned long v)
     if ( !(l4e_get_flags(*pl4e) & _PAGE_PRESENT) )
     {
         bool locking = system_state > SYS_STATE_boot;
-        l3_pgentry_t *pl3e = alloc_xen_pagetable();
+        l3_pgentry_t *pl3e = alloc_xen_l3_pagetable();
 
         if ( !pl3e )
             return NULL;
@@ -4953,7 +4953,7 @@ static l2_pgentry_t *virt_to_xen_l2e(unsigned long v)
     if ( !(l3e_get_flags(*pl3e) & _PAGE_PRESENT) )
     {
         bool locking = system_state > SYS_STATE_boot;
-        l2_pgentry_t *pl2e = alloc_xen_pagetable();
+        l2_pgentry_t *pl2e = alloc_xen_l2_pagetable();
 
         if ( !pl2e )
             return NULL;
@@ -4986,7 +4986,7 @@ l1_pgentry_t *virt_to_xen_l1e(unsigned long v)
     if ( !(l2e_get_flags(*pl2e) & _PAGE_PRESENT) )
     {
         bool locking = system_state > SYS_STATE_boot;
-        l1_pgentry_t *pl1e = alloc_xen_pagetable();
+        l1_pgentry_t *pl1e = alloc_xen_l1_pagetable();
 
         if ( !pl1e )
             return NULL;
@@ -5137,7 +5137,7 @@ int map_pages_to_xen(
                 continue;
             }
 
-            pl2e = alloc_xen_pagetable();
+            pl2e = alloc_xen_l2_pagetable();
             if ( pl2e == NULL )
                 return -ENOMEM;
 
@@ -5236,7 +5236,7 @@ int map_pages_to_xen(
                     goto check_l3;
                 }
 
-                pl1e = alloc_xen_pagetable();
+                pl1e = alloc_xen_l1_pagetable();
                 if ( pl1e == NULL )
                     return -ENOMEM;
 
@@ -5448,7 +5448,7 @@ int modify_xen_mappings(unsigned long s, unsigned long e, unsigned int nf)
             }
 
             /* PAGE1GB: shatter the superpage and fall through. */
-            pl2e = alloc_xen_pagetable();
+            pl2e = alloc_xen_l2_pagetable();
             if ( !pl2e )
                 return -ENOMEM;
             for ( i = 0; i < L2_PAGETABLE_ENTRIES; i++ )
@@ -5503,7 +5503,7 @@ int modify_xen_mappings(unsigned long s, unsigned long e, unsigned int nf)
             else
             {
                 /* PSE: shatter the superpage and try again. */
-                pl1e = alloc_xen_pagetable();
+                pl1e = alloc_xen_l1_pagetable();
                 if ( !pl1e )
                     return -ENOMEM;
                 for ( i = 0; i < L1_PAGETABLE_ENTRIES; i++ )

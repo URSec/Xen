@@ -375,6 +375,43 @@ void efi_update_l4_pgtable(unsigned int l4idx, l4_pgentry_t);
 
 /* Allocator functions for Xen pagetables. */
 void *alloc_xen_pagetable(void);
+
+static inline void *alloc_xen_l1_pagetable(void)
+{
+    l1_pgentry_t *l1_table = alloc_xen_pagetable();
+    if (IS_ENABLED(CONFIG_SVA) && l1_table != NULL) {
+        sva_declare_l1_page(__pa(l1_table));
+    }
+    return l1_table;
+}
+
+static inline void *alloc_xen_l2_pagetable(void)
+{
+    l2_pgentry_t *l2_table = alloc_xen_pagetable();
+    if (IS_ENABLED(CONFIG_SVA) && l2_table != NULL) {
+        sva_declare_l2_page(__pa(l2_table));
+    }
+    return l2_table;
+}
+
+static inline void *alloc_xen_l3_pagetable(void)
+{
+    l3_pgentry_t *l3_table = alloc_xen_pagetable();
+    if (IS_ENABLED(CONFIG_SVA) && l3_table != NULL) {
+        sva_declare_l3_page(__pa(l3_table));
+    }
+    return l3_table;
+}
+
+static inline void *alloc_xen_l4_pagetable(void)
+{
+    l4_pgentry_t *l4_table = alloc_xen_pagetable();
+    if (IS_ENABLED(CONFIG_SVA) && l4_table != NULL) {
+        sva_declare_l4_page(__pa(l4_table));
+    }
+    return l4_table;
+}
+
 void free_xen_pagetable(void *v);
 l1_pgentry_t *virt_to_xen_l1e(unsigned long v);
 

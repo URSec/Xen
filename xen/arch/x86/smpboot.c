@@ -722,7 +722,7 @@ static int clone_mapping(const void *ptr, root_pgentry_t *rpt)
 
     if ( !(root_get_flags(rpt[root_table_offset(linear)]) & _PAGE_PRESENT) )
     {
-        pl3e = alloc_xen_pagetable();
+        pl3e = alloc_xen_l3_pagetable();
         if ( !pl3e )
             return -ENOMEM;
         clear_page(pl3e);
@@ -736,7 +736,7 @@ static int clone_mapping(const void *ptr, root_pgentry_t *rpt)
 
     if ( !(l3e_get_flags(*pl3e) & _PAGE_PRESENT) )
     {
-        pl2e = alloc_xen_pagetable();
+        pl2e = alloc_xen_l2_pagetable();
         if ( !pl2e )
             return -ENOMEM;
         clear_page(pl2e);
@@ -752,7 +752,7 @@ static int clone_mapping(const void *ptr, root_pgentry_t *rpt)
 
     if ( !(l2e_get_flags(*pl2e) & _PAGE_PRESENT) )
     {
-        pl1e = alloc_xen_pagetable();
+        pl1e = alloc_xen_l1_pagetable();
         if ( !pl1e )
             return -ENOMEM;
         clear_page(pl1e);
@@ -793,7 +793,7 @@ static int setup_cpu_root_pgt(unsigned int cpu)
     if ( !opt_xpti_hwdom && !opt_xpti_domu )
         return 0;
 
-    rpt = alloc_xen_pagetable();
+    rpt = alloc_xen_l4_pagetable();
     if ( !rpt )
         return -ENOMEM;
 

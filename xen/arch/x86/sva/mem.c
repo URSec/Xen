@@ -142,7 +142,7 @@ void __init map_sva_static_data(void)
 
 static int __init shatter_l2_superpage(l2_pgentry_t *pl2e)
 {
-    l1_pgentry_t *l1_table = alloc_xen_pagetable();
+    l1_pgentry_t *l1_table = alloc_xen_l1_pagetable();
     if (l1_table == NULL) {
         return -ENOMEM;
     }
@@ -160,7 +160,7 @@ static int __init shatter_l2_superpage(l2_pgentry_t *pl2e)
 
 static int __init shatter_l3_superpage(l3_pgentry_t *pl3e)
 {
-    l2_pgentry_t *l2_table = alloc_xen_pagetable();
+    l2_pgentry_t *l2_table = alloc_xen_l2_pagetable();
     if (l2_table == NULL) {
         return -ENOMEM;
     }

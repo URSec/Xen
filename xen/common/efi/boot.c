@@ -1440,7 +1440,7 @@ static __init void copy_mapping(unsigned long mfn, unsigned long end,
             continue;
         if ( !(l4e_get_flags(l4e) & _PAGE_PRESENT) )
         {
-            l3dst = alloc_xen_pagetable();
+            l3dst = alloc_xen_l3_pagetable();
             BUG_ON(!l3dst);
             clear_page(l3dst);
             efi_l4_pgtable[l4_table_offset(mfn << PAGE_SHIFT)] =
@@ -1596,7 +1596,7 @@ void __init efi_init_memory(void)
                                  mdesc_ver, efi_memmap);
 #else
     /* Set up 1:1 page tables to do runtime calls in "physical" mode. */
-    efi_l4_pgtable = alloc_xen_pagetable();
+    efi_l4_pgtable = alloc_xen_l4_pagetable();
     BUG_ON(!efi_l4_pgtable);
     clear_page(efi_l4_pgtable);
 
@@ -1630,7 +1630,7 @@ void __init efi_init_memory(void)
 
         if ( !(l4e_get_flags(l4e) & _PAGE_PRESENT) )
         {
-            pl3e = alloc_xen_pagetable();
+            pl3e = alloc_xen_l3_pagetable();
             BUG_ON(!pl3e);
             clear_page(pl3e);
             efi_l4_pgtable[l4_table_offset(addr)] =
@@ -1641,7 +1641,7 @@ void __init efi_init_memory(void)
         pl3e += l3_table_offset(addr);
         if ( !(l3e_get_flags(*pl3e) & _PAGE_PRESENT) )
         {
-            pl2e = alloc_xen_pagetable();
+            pl2e = alloc_xen_l2_pagetable();
             BUG_ON(!pl2e);
             clear_page(pl2e);
             *pl3e = l3e_from_paddr(virt_to_maddr(pl2e), __PAGE_HYPERVISOR);
@@ -1654,7 +1654,7 @@ void __init efi_init_memory(void)
         pl2e += l2_table_offset(addr);
         if ( !(l2e_get_flags(*pl2e) & _PAGE_PRESENT) )
         {
-            l1t = alloc_xen_pagetable();
+            l1t = alloc_xen_l1_pagetable();
             BUG_ON(!l1t);
             clear_page(l1t);
             *pl2e = l2e_from_paddr(virt_to_maddr(l1t), __PAGE_HYPERVISOR);
