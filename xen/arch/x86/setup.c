@@ -596,9 +596,6 @@ static inline bool using_2M_mapping(void)
 
 static void noinline init_done(void)
 {
-    void *va;
-    unsigned long start, end;
-
     system_state = SYS_STATE_active;
 
     domain_unpause_by_systemcontroller(dom0);
@@ -607,16 +604,12 @@ static void noinline init_done(void)
     unregister_init_virtual_region();
 
     /* Zero the .init code and data. */
-#ifdef CONFIG_SVA
-    // SVA made our init code unwritable, so we need to make it writable again
-    // (and not executable).
-    modify_xen_mappings((uintptr_t)__init_begin, (uintptr_t)__init_end,
-                        PAGE_HYPERVISOR_RW);
-#endif
-    for ( va = __init_begin; va < _p(__init_end); va += PAGE_SIZE )
+#ifndef CONFIG_SVA
+    for (void *va = __init_begin; va < _p(__init_end); va += PAGE_SIZE)
         clear_page(va);
 
     /* Destroy Xen's mappings, and reuse the pages. */
+    unsigned long start, end;
     if ( using_2M_mapping() )
     {
         start = (unsigned long)&__2M_init_start,
@@ -631,6 +624,7 @@ static void noinline init_done(void)
     destroy_xen_mappings(start, end);
     init_xenheap_pages(__pa(start), __pa(end));
     printk("Freed %lukB init memory\n", (end - start) >> 10);
+#endif
 
     startup_cpu_idle_loop();
 }
