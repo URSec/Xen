@@ -15,6 +15,10 @@
 #include <xen/smp.h>
 #include <xen/types.h>
 
+#ifdef CONFIG_SVA
+#include <sva/mmu_intrinsics.h>
+#endif
+
 /* The current time as shown by the virtual TLB clock. */
 extern u32 tlbflush_clock;
 
@@ -75,6 +79,12 @@ static inline void tlbflush_filter(cpumask_t *mask, uint32_t page_timestamp)
 void new_tlbflush_clock_period(void);
 
 /* Read pagetable base. */
+#ifdef CONFIG_SVA
+static inline unsigned long read_cr3(void)
+{
+    return sva_mm_save_pgtable();
+}
+#else
 static inline unsigned long read_cr3(void)
 {
     unsigned long cr3;
@@ -82,6 +92,7 @@ static inline unsigned long read_cr3(void)
         "mov %%cr3, %0" : "=r" (cr3) : );
     return cr3;
 }
+#endif
 
 /* Write pagetable base and implicitly tick the tlbflush clock. */
 void switch_cr3_cr4(unsigned long cr3, unsigned long cr4);

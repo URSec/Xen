@@ -14,6 +14,10 @@
 #include <asm/cpufeature.h>
 #include <asm/desc.h>
 #include <asm/x86_emulate.h>
+
+#ifdef CONFIG_SVA
+#include <sva/mmu_intrinsics.h>
+#endif
 #endif
 
 #include <asm/x86-defns.h>
@@ -282,10 +286,17 @@ static inline unsigned long read_cr2(void)
     return cr2;
 }
 
+#ifdef CONFIG_SVA
+static inline void write_cr3(unsigned long val)
+{
+    sva_mm_load_pgtable(val);
+}
+#else
 static inline void write_cr3(unsigned long val)
 {
     asm volatile ( "mov %0, %%cr3" : : "r" (val) : "memory" );
 }
+#endif
 
 static inline unsigned long cr3_pa(unsigned long cr3)
 {
