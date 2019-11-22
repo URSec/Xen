@@ -5693,10 +5693,7 @@ int create_perdomain_mapping(struct domain *d, unsigned long va,
         if ( !pg )
             return -ENOMEM;
         l3tab = __map_domain_page(pg);
-        clear_page(l3tab);
-#ifdef CONFIG_SVA
-        sva_declare_l3_page(page_to_maddr(pg));
-#endif
+        declare_and_clear_l3_table(l3tab);
         d->arch.perdomain_l3_pg = pg;
         if ( !nr )
         {
@@ -5720,10 +5717,7 @@ int create_perdomain_mapping(struct domain *d, unsigned long va,
             return -ENOMEM;
         }
         l2tab = __map_domain_page(pg);
-        clear_page(l2tab);
-#ifdef CONFIG_SVA
-        sva_declare_l2_page(page_to_maddr(pg));
-#endif
+        declare_and_clear_l2_table(l2tab);
         l3e_write(&l3tab[l3_table_offset(va)],
                   l3e_from_page(pg, __PAGE_HYPERVISOR_RW));
     }
@@ -5766,10 +5760,7 @@ int create_perdomain_mapping(struct domain *d, unsigned long va,
                 }
                 l1tab = __map_domain_page(pg);
             }
-            clear_page(l1tab);
-#ifdef CONFIG_SVA
-            sva_declare_l1_page(page_to_maddr(pg));
-#endif
+            declare_and_clear_l1_table(l1tab);
             l2e_write(pl2e, l2e_from_page(pg, __PAGE_HYPERVISOR_RW));
         }
         else if ( !l1tab )
