@@ -379,8 +379,14 @@ void *alloc_xen_pagetable(void);
 static inline void *alloc_xen_l1_pagetable(void)
 {
     l1_pgentry_t *l1_table = alloc_xen_pagetable();
-    if (IS_ENABLED(CONFIG_SVA) && l1_table != NULL) {
+    if (l1_table != NULL) {
+#ifdef CONFIG_SVA
         sva_declare_l1_page(__pa(l1_table));
+        // SVA will have already cleared the page, and we can't write to it
+        // anyway.
+#else
+        clear_page(l1_table);
+#endif
     }
     return l1_table;
 }
@@ -388,8 +394,14 @@ static inline void *alloc_xen_l1_pagetable(void)
 static inline void *alloc_xen_l2_pagetable(void)
 {
     l2_pgentry_t *l2_table = alloc_xen_pagetable();
-    if (IS_ENABLED(CONFIG_SVA) && l2_table != NULL) {
+    if (l2_table != NULL) {
+#ifdef CONFIG_SVA
         sva_declare_l2_page(__pa(l2_table));
+        // SVA will have already cleared the page, and we can't write to it
+        // anyway.
+#else
+        clear_page(l2_table);
+#endif
     }
     return l2_table;
 }
@@ -397,8 +409,14 @@ static inline void *alloc_xen_l2_pagetable(void)
 static inline void *alloc_xen_l3_pagetable(void)
 {
     l3_pgentry_t *l3_table = alloc_xen_pagetable();
-    if (IS_ENABLED(CONFIG_SVA) && l3_table != NULL) {
+    if (l3_table != NULL) {
+#ifdef CONFIG_SVA
         sva_declare_l3_page(__pa(l3_table));
+        // SVA will have already cleared the page, and we can't write to it
+        // anyway.
+#else
+        clear_page(l3_table);
+#endif
     }
     return l3_table;
 }
@@ -406,8 +424,14 @@ static inline void *alloc_xen_l3_pagetable(void)
 static inline void *alloc_xen_l4_pagetable(void)
 {
     l4_pgentry_t *l4_table = alloc_xen_pagetable();
-    if (IS_ENABLED(CONFIG_SVA) && l4_table != NULL) {
+    if (l4_table != NULL) {
+#ifdef CONFIG_SVA
         sva_declare_l4_page(__pa(l4_table));
+        // SVA will have already cleared the page, and we can't write to it
+        // anyway.
+#else
+        clear_page(l4_table);
+#endif
     }
     return l4_table;
 }

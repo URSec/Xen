@@ -725,7 +725,6 @@ static int clone_mapping(const void *ptr, root_pgentry_t *rpt)
         pl3e = alloc_xen_l3_pagetable();
         if ( !pl3e )
             return -ENOMEM;
-        clear_page(pl3e);
         l4e_write(&rpt[root_table_offset(linear)],
                   l4e_from_paddr(__pa(pl3e), __PAGE_HYPERVISOR));
     }
@@ -739,7 +738,6 @@ static int clone_mapping(const void *ptr, root_pgentry_t *rpt)
         pl2e = alloc_xen_l2_pagetable();
         if ( !pl2e )
             return -ENOMEM;
-        clear_page(pl2e);
         l3e_write(pl3e, l3e_from_paddr(__pa(pl2e), __PAGE_HYPERVISOR));
     }
     else
@@ -755,7 +753,6 @@ static int clone_mapping(const void *ptr, root_pgentry_t *rpt)
         pl1e = alloc_xen_l1_pagetable();
         if ( !pl1e )
             return -ENOMEM;
-        clear_page(pl1e);
         l2e_write(pl2e, l2e_from_paddr(__pa(pl1e), __PAGE_HYPERVISOR));
     }
     else
@@ -797,7 +794,6 @@ static int setup_cpu_root_pgt(unsigned int cpu)
     if ( !rpt )
         return -ENOMEM;
 
-    clear_page(rpt);
     per_cpu(root_pgt, cpu) = rpt;
 
     rpt[root_table_offset(RO_MPT_VIRT_START)] =

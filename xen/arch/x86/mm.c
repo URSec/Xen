@@ -4922,7 +4922,6 @@ static l3_pgentry_t *virt_to_xen_l3e(unsigned long v)
 
         if ( !pl3e )
             return NULL;
-        clear_page(pl3e);
         if ( locking )
             spin_lock(&map_pgdir_lock);
         if ( !(l4e_get_flags(*pl4e) & _PAGE_PRESENT) )
@@ -4957,7 +4956,6 @@ static l2_pgentry_t *virt_to_xen_l2e(unsigned long v)
 
         if ( !pl2e )
             return NULL;
-        clear_page(pl2e);
         if ( locking )
             spin_lock(&map_pgdir_lock);
         if ( !(l3e_get_flags(*pl3e) & _PAGE_PRESENT) )
@@ -4990,7 +4988,6 @@ l1_pgentry_t *virt_to_xen_l1e(unsigned long v)
 
         if ( !pl1e )
             return NULL;
-        clear_page(pl1e);
         if ( locking )
             spin_lock(&map_pgdir_lock);
         if ( !(l2e_get_flags(*pl2e) & _PAGE_PRESENT) )
@@ -5697,6 +5694,9 @@ int create_perdomain_mapping(struct domain *d, unsigned long va,
             return -ENOMEM;
         l3tab = __map_domain_page(pg);
         clear_page(l3tab);
+#ifdef CONFIG_SVA
+        sva_declare_l3_page(page_to_maddr(pg));
+#endif
         d->arch.perdomain_l3_pg = pg;
         if ( !nr )
         {
@@ -5721,7 +5721,11 @@ int create_perdomain_mapping(struct domain *d, unsigned long va,
         }
         l2tab = __map_domain_page(pg);
         clear_page(l2tab);
-        l3tab[l3_table_offset(va)] = l3e_from_page(pg, __PAGE_HYPERVISOR_RW);
+#ifdef CONFIG_SVA
+        sva_declare_l2_page(page_to_maddr(pg));
+#endif
+        l3e_write(&l3tab[l3_table_offset(va)],
+                  l3e_from_page(pg, __PAGE_HYPERVISOR_RW));
     }
     else
         l2tab = map_l2t_from_l3e(l3tab[l3_table_offset(va)]);
@@ -5763,7 +5767,10 @@ int create_perdomain_mapping(struct domain *d, unsigned long va,
                 l1tab = __map_domain_page(pg);
             }
             clear_page(l1tab);
-            *pl2e = l2e_from_page(pg, __PAGE_HYPERVISOR_RW);
+#ifdef CONFIG_SVA
+            sva_declare_l1_page(page_to_maddr(pg));
+#endif
+            l2e_write(pl2e, l2e_from_page(pg, __PAGE_HYPERVISOR_RW));
         }
         else if ( !l1tab )
             l1tab = map_l1t_from_l2e(*pl2e);
@@ -5777,8 +5784,8 @@ int create_perdomain_mapping(struct domain *d, unsigned long va,
                 clear_domain_page(page_to_mfn(pg));
                 if ( !IS_NIL(ppg) )
                     *ppg++ = pg;
-                l1tab[l1_table_offset(va)] =
-                    l1e_from_page(pg, __PAGE_HYPERVISOR_RW | _PAGE_AVAIL0);
+                l1e_write(&l1tab[l1_table_offset(va)],
+                    l1e_from_page(pg, __PAGE_HYPERVISOR_RW | _PAGE_AVAIL0));
                 l2e_add_flags(*pl2e, _PAGE_AVAIL0);
             }
             else
