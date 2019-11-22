@@ -41,6 +41,10 @@
 
 #include <xsm/xsm.h>
 
+#ifdef CONFIG_SVA
+#include <xen-sva/mem.h>
+#endif
+
 #include "../x86_64/mmconfig.h"
 #include "emulate.h"
 #include "mm.h"
@@ -72,6 +76,10 @@ static io_emul_stub_t *io_emul_stub_setup(struct priv_op_ctxt *ctxt, u8 opcode,
         ctxt->io_emul_stub =
             map_domain_page(_mfn(this_stubs->mfn)) + (stub_va & ~PAGE_MASK);
 
+#ifdef CONFIG_SVA
+    sva_unprotect_code_page(ctxt->io_emul_stub);
+#endif
+
     /* Put a CFI label in the stub. */
     *(uint32_t*)&ctxt->io_emul_stub[0] = 0xfa1e0ff3U;
 
@@ -96,6 +104,10 @@ static io_emul_stub_t *io_emul_stub_setup(struct priv_op_ctxt *ctxt, u8 opcode,
         /* ret (jumps to guest_to_host_gpr_switch) */
         ctxt->io_emul_stub[12] = 0xc3;
     }
+
+#ifdef CONFIG_SVA
+    sva_protect_code_page(ctxt->io_emul_stub);
+#endif
 
     BUILD_BUG_ON(STUB_BUF_SIZE / 2 < MAX(13, /* Default emul stub */
                                          9 + IOEMUL_QUIRK_STUB_BYTES));

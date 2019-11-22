@@ -11,6 +11,10 @@
 #include <xen/livepatch.h>
 #include <xen/warning.h>
 
+#ifdef CONFIG_SVA
+#include <xen-sva/mem.h>
+#endif
+
 #define EX_FIELD(ptr, field) ((unsigned long)&(ptr)->field + (ptr)->field)
 
 static inline unsigned long ex_addr(const struct exception_table_entry *x)
@@ -156,8 +160,14 @@ static int __init stub_selftest(void)
                        (addr & ~PAGE_MASK);
         union stub_exception_token res = { .raw = ~0 };
 
+#ifdef CONFIG_SVA
+        sva_unprotect_code_page(ptr);
+#endif
         memset(ptr, 0xcc, STUB_BUF_SIZE / 2);
         memcpy(ptr, tests[i].opc, ARRAY_SIZE(tests[i].opc));
+#ifdef CONFIG_SVA
+        sva_protect_code_page(ptr);
+#endif
         unmap_domain_page(ptr);
 
         asm volatile ( "INDIRECT_CALL %[stb]\n"
