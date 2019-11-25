@@ -258,6 +258,33 @@ void copy_page_sse2(void *, const void *);
 #define clear_page(_p)      clear_page_sse2(_p)
 #define copy_page(_t, _f)   copy_page_sse2(_t, _f)
 
+#ifdef CONFIG_SVA
+
+static inline void
+copy_l4_table(l4_pgentry_t *dst, l4_pgentry_t *src, size_t count)
+{
+    for (size_t i = 0; i < count; ++i) {
+        l4e_write(&dst[i], src[i]);
+    }
+}
+
+static inline void clear_l4_table(l4_pgentry_t *dst, size_t count)
+{
+    for (size_t i = 0; i < count; ++i) {
+        l4e_write(&dst[i], l4e_empty());
+    }
+}
+
+#else
+
+#define copy_l4_table(dst, src, count) \
+    memcpy((dst), (src), (count) * sizeof(l4_pgentry_t))
+
+#define clear_l4_table(dst, count) \
+    memset((dst), 0, (count) * sizeof(l4_pgentry_t))
+
+#endif
+
 /* Convert between Xen-heap virtual addresses and machine addresses. */
 #define __pa(x)             (virt_to_maddr(x))
 #define __va(x)             (maddr_to_virt(x))

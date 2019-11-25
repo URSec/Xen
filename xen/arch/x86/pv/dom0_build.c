@@ -140,8 +140,8 @@ static __init void setup_pv_physmap(struct domain *d, unsigned long pgtbl_pfn,
             page->count_info = PGC_allocated | 2;
             page->u.inuse.type_info = PGT_l3_page_table | PGT_validated | 1;
             pl3e = __map_domain_page(page);
-            clear_page(pl3e);
-            *pl4e = l4e_from_page(page, L4_PROT);
+            declare_and_clear_l3_table(pl3e);
+            l4e_write(pl4e, l4e_from_page(page, L4_PROT));
         } else
             pl3e = map_l3t_from_l4e(*pl4e);
 
@@ -162,7 +162,8 @@ static __init void setup_pv_physmap(struct domain *d, unsigned long pgtbl_pfn,
                                              L3_PAGETABLE_SHIFT - PAGE_SHIFT,
                                              MEMF_no_scrub)) != NULL )
             {
-                *pl3e = l3e_from_page(page, L1_PROT|_PAGE_DIRTY|_PAGE_PSE);
+                l3e_write(pl3e,
+                          l3e_from_page(page, L1_PROT|_PAGE_DIRTY|_PAGE_PSE));
                 vphysmap_start += 1UL << L3_PAGETABLE_SHIFT;
                 continue;
             }
@@ -173,8 +174,8 @@ static __init void setup_pv_physmap(struct domain *d, unsigned long pgtbl_pfn,
             page->count_info = PGC_allocated | 2;
             page->u.inuse.type_info = PGT_l2_page_table | PGT_validated | 1;
             pl2e = __map_domain_page(page);
-            clear_page(pl2e);
-            *pl3e = l3e_from_page(page, L3_PROT);
+            declare_and_clear_l2_table(pl2e);
+            l3e_write(pl3e, l3e_from_page(page, L3_PROT));
         }
         else
             pl2e = map_l2t_from_l3e(*pl3e);
@@ -188,7 +189,8 @@ static __init void setup_pv_physmap(struct domain *d, unsigned long pgtbl_pfn,
                                              L2_PAGETABLE_SHIFT - PAGE_SHIFT,
                                              MEMF_no_scrub)) != NULL )
             {
-                *pl2e = l2e_from_page(page, L1_PROT|_PAGE_DIRTY|_PAGE_PSE);
+                l2e_write(pl2e,
+                          l2e_from_page(page, L1_PROT|_PAGE_DIRTY|_PAGE_PSE));
                 vphysmap_start += 1UL << L2_PAGETABLE_SHIFT;
                 continue;
             }
@@ -199,8 +201,8 @@ static __init void setup_pv_physmap(struct domain *d, unsigned long pgtbl_pfn,
             page->count_info = PGC_allocated | 2;
             page->u.inuse.type_info = PGT_l1_page_table | PGT_validated | 1;
             pl1e = __map_domain_page(page);
-            clear_page(pl1e);
-            *pl2e = l2e_from_page(page, L2_PROT);
+            declare_and_clear_l1_table(pl1e);
+            l2e_write(pl2e, l2e_from_page(page, L2_PROT));
         }
         else
             pl1e = map_l1t_from_l2e(*pl2e);
@@ -211,7 +213,7 @@ static __init void setup_pv_physmap(struct domain *d, unsigned long pgtbl_pfn,
         if ( !page )
             break;
 
-        *pl1e = l1e_from_page(page, L1_PROT|_PAGE_DIRTY);
+        l1e_write(pl1e, l1e_from_page(page, L1_PROT|_PAGE_DIRTY));
         vphysmap_start += PAGE_SIZE;
         vphysmap_start &= PAGE_MASK;
     }
@@ -617,7 +619,7 @@ int __init dom0_construct_pv(struct domain *d,
         maddr_to_page(mpt_alloc)->u.inuse.type_info = PGT_l3_page_table;
         l3start = __va(mpt_alloc); mpt_alloc += PAGE_SIZE;
     }
-    clear_page(l4tab);
+    declare_and_clear_l4_table(l4tab);
     init_xen_l4_slots(l4tab, _mfn(virt_to_mfn(l4start)),
                       d, INVALID_MFN, true);
     v->arch.guest_table = pagetable_from_paddr(__pa(l4start));
@@ -626,49 +628,74 @@ int __init dom0_construct_pv(struct domain *d,
 
     l4tab += l4_table_offset(v_start);
     pfn = alloc_spfn;
+
+    paddr_t mpt_alloc_l3 = mpt_alloc;
+    paddr_t mpt_alloc_l2 =
+        mpt_alloc_l3 + NR(v_start, v_end, L4_PAGETABLE_SHIFT) * PAGE_SIZE;
+    paddr_t mpt_alloc_l1 =
+        mpt_alloc_l2 + NR(v_start, v_end, L3_PAGETABLE_SHIFT) * PAGE_SIZE;
+    paddr_t mpt_alloc_end =
+        mpt_alloc_l1 + NR(v_start, v_end, L2_PAGETABLE_SHIFT) * PAGE_SIZE;
+
+    // Pre-declare all of our page tables (this is necessary for SVA).
+    for (paddr_t l3_table = mpt_alloc_l3; l3_table < mpt_alloc_l2;
+         l3_table += PAGE_SIZE)
+    {
+        maddr_to_page(l3_table)->u.inuse.type_info = PGT_l3_page_table;
+        declare_and_clear_l3_table(__va(l3_table));
+    }
+    for (paddr_t l2_table = mpt_alloc_l2; l2_table < mpt_alloc_l1;
+         l2_table += PAGE_SIZE)
+    {
+        maddr_to_page(l2_table)->u.inuse.type_info = PGT_l2_page_table;
+        declare_and_clear_l2_table(__va(l2_table));
+    }
+    for (paddr_t l1_table = mpt_alloc_l1; l1_table < mpt_alloc_end;
+         l1_table += PAGE_SIZE)
+    {
+        maddr_to_page(l1_table)->u.inuse.type_info = PGT_l1_page_table;
+        declare_and_clear_l1_table(__va(l1_table));
+    }
+
     for ( count = 0; count < ((v_end-v_start) >> PAGE_SHIFT); count++ )
     {
         if ( !((unsigned long)l1tab & (PAGE_SIZE-1)) )
         {
-            maddr_to_page(mpt_alloc)->u.inuse.type_info = PGT_l1_page_table;
-            l1start = l1tab = __va(mpt_alloc); mpt_alloc += PAGE_SIZE;
-            clear_page(l1tab);
+            ASSERT(mpt_alloc_l1 < mpt_alloc_end);
+            l1start = l1tab = __va(mpt_alloc_l1); mpt_alloc_l1 += PAGE_SIZE;
             if ( count == 0 )
                 l1tab += l1_table_offset(v_start);
             if ( !((unsigned long)l2tab & (PAGE_SIZE-1)) )
             {
-                maddr_to_page(mpt_alloc)->u.inuse.type_info = PGT_l2_page_table;
-                l2start = l2tab = __va(mpt_alloc); mpt_alloc += PAGE_SIZE;
-                clear_page(l2tab);
+                ASSERT(mpt_alloc_l2 < mpt_alloc_l1);
+                l2start = l2tab = __va(mpt_alloc_l2); mpt_alloc_l2 += PAGE_SIZE;
                 if ( count == 0 )
                     l2tab += l2_table_offset(v_start);
                 if ( !((unsigned long)l3tab & (PAGE_SIZE-1)) )
                 {
                     if ( count || !l3start )
                     {
-                        maddr_to_page(mpt_alloc)->u.inuse.type_info =
-                            PGT_l3_page_table;
-                        l3start = __va(mpt_alloc); mpt_alloc += PAGE_SIZE;
+                        ASSERT(mpt_alloc_l3 < mpt_alloc_l2);
+                        l3start = __va(mpt_alloc_l3); mpt_alloc_l3 += PAGE_SIZE;
                     }
                     l3tab = l3start;
-                    clear_page(l3tab);
                     if ( count == 0 )
                         l3tab += l3_table_offset(v_start);
-                    *l4tab = l4e_from_paddr(__pa(l3start), L4_PROT);
+                    l4e_write(l4tab, l4e_from_paddr(__pa(l3start), L4_PROT));
                     l4tab++;
                 }
-                *l3tab = l3e_from_paddr(__pa(l2start), L3_PROT);
+                l3e_write(l3tab, l3e_from_paddr(__pa(l2start), L3_PROT));
                 l3tab++;
             }
-            *l2tab = l2e_from_paddr(__pa(l1start), L2_PROT);
+            l2e_write(l2tab, l2e_from_paddr(__pa(l1start), L2_PROT));
             l2tab++;
         }
         if ( count < initrd_pfn || count >= initrd_pfn + PFN_UP(initrd_len) )
             mfn = pfn++;
         else
             mfn = initrd_mfn++;
-        *l1tab = l1e_from_pfn(mfn, (!is_pv_32bit_domain(d) ?
-                                    L1_PROT : COMPAT_L1_PROT));
+        l1e_write(l1tab, l1e_from_pfn(mfn, (!is_pv_32bit_domain(d) ?
+                                            L1_PROT : COMPAT_L1_PROT)));
         l1tab++;
 
         page = mfn_to_page(_mfn(mfn));
@@ -684,10 +711,8 @@ int __init dom0_construct_pv(struct domain *d,
         {
             if ( !l3e_get_intpte(*l3tab) )
             {
-                maddr_to_page(mpt_alloc)->u.inuse.type_info = PGT_l2_page_table;
-                l2tab = __va(mpt_alloc); mpt_alloc += PAGE_SIZE;
-                clear_page(l2tab);
-                *l3tab = l3e_from_paddr(__pa(l2tab), L3_PROT);
+                l2tab = __va(mpt_alloc_l2); mpt_alloc_l2 += PAGE_SIZE;
+                l3e_write(l3tab, l3e_from_paddr(__pa(l2tab), L3_PROT));
             }
             if ( i == 3 )
                 l3e_get_page(*l3tab)->u.inuse.type_info |= PGT_pae_xen_l2;
