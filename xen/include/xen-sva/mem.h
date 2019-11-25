@@ -22,8 +22,10 @@
 
 #include <xen/init.h>
 #include <xen/types.h>
+#include <asm/page.h>
 
 #include <sva/secmem.h>
+#include <sva/mmu_intrinsics.h>
 
 /**
  * Map SVA's static data into the secure memory area
@@ -42,5 +44,17 @@ void __init init_sva_mmu(void);
  * @param level     The level of the page table which contains the entry (1-4)
  */
 void *get_page_table_entry_sva(uintptr_t virt_addr, int level);
+
+/**
+ * Update a page table entry through SVA.
+ *
+ * Uses Xen's page info to determine the type of entry being updated in order to
+ * call the appropriate SVA intrinsic. This allows callers to update a page
+ * table entry without needing to know its type a priori.
+ *
+ * @param entry The page table entry to update
+ * @param new   The new entry to write
+ */
+void update_pte_sva(intpte_t *entry, intpte_t new);
 
 #endif /* _XEN_SVA_MEM_H */

@@ -111,6 +111,29 @@ void *get_page_table_entry_sva(uintptr_t virt_addr, int level) {
     }
 }
 
+void update_pte_sva(intpte_t *entry, intpte_t new) {
+    struct page_info *pg = virt_to_page(entry);
+    BUG_ON(pg == NULL);
+    BUG_ON(!page_state_is(pg, inuse));
+
+    switch (pg->u.inuse.type_info & PGT_type_mask) {
+    case PGT_l1_page_table:
+        sva_update_l1_mapping(entry, new);
+        break;
+    case PGT_l2_page_table:
+        sva_update_l2_mapping(entry, new);
+        break;
+    case PGT_l3_page_table:
+        sva_update_l3_mapping(entry, new);
+        break;
+    case PGT_l4_page_table:
+        sva_update_l4_mapping(entry, new);
+        break;
+    default:
+        BUG();
+    }
+}
+
 void __init map_sva_static_data(void)
 {
 #ifndef NDEBUG

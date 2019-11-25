@@ -31,6 +31,9 @@
 #include <xen/domain_page.h>
 #include <asm/flushtlb.h>
 #include <asm/domain.h>
+#ifdef CONFIG_SVA
+#include <xen-sva/mem.h>
+#endif
 
 /*****************************************************************************
  * Macros to tell which paging mode a domain is in */
@@ -304,7 +307,12 @@ static inline bool paging_write_guest_entry(
         return paging_get_hostmode(v)->shadow.write_guest_entry(v, p, new,
                                                                 gmfn);
 #endif
+#ifdef CONFIG_SVA
+    update_pte_sva(p, new);
+    return 1;
+#else
     return !__copy_to_user(p, &new, sizeof(new));
+#endif
 }
 
 
@@ -322,14 +330,25 @@ static inline bool paging_cmpxchg_guest_entry(
         return paging_get_hostmode(v)->shadow.cmpxchg_guest_entry(v, p, old,
                                                                   new, gmfn);
 #endif
+#ifdef CONFIG_SVA
+    // Note: no need to worry about concurrent updates here as SVA doesn't
+    // (yet) support SMP.
+    update_pte_sva(p, new);
+    return 1;
+#else
     return !cmpxchg_user(p, *old, new);
+#endif
 }
 
 /* Helper function that writes a pte in such a way that a concurrent read 
  * never sees a half-written entry that has _PAGE_PRESENT set */
 static inline void safe_write_pte(l1_pgentry_t *p, l1_pgentry_t new)
 {
+#ifdef CONFIG_SVA
+    sva_update_l1_mapping(&l1e_get_intpte(*p), l1e_get_intpte(new));
+#else
     *p = new;
+#endif
 }
 
 /* Atomically write a P2M entry and update the paging-assistance state 
