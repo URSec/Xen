@@ -63,7 +63,11 @@ static __init void mark_pv_pt_pages_rdonly(struct domain *d,
     pl1e += l1_table_offset(vpt_start);
     for ( count = 0; count < nr_pt_pages; count++ )
     {
-        l1e_remove_flags(*pl1e, _PAGE_RW);
+        // NB: We can't use l1e_remove_flags directly on the PTE because SVA has
+        // removed our write access to the page.
+        l1_pgentry_t nl1e = *pl1e;
+        l1e_remove_flags(nl1e, _PAGE_RW);
+        l1e_write(pl1e, nl1e);
         page = mfn_to_page(l1e_get_mfn(*pl1e));
 
         /* Read-only mapping + PGC_allocated + page-table page. */
