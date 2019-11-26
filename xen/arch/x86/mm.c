@@ -146,6 +146,10 @@
 #include <asm/pv/grant_table.h>
 #include <asm/pv/mm.h>
 
+#ifdef CONFIG_SVA
+#include <xen-sva/mem.h>
+#endif
+
 #include "pv/mm.h"
 
 /* Override macros from asm/page.h to make them work with mfn_t */
@@ -1747,8 +1751,8 @@ bool fill_ro_mpt(mfn_t mfn)
 
     if ( !l4e_get_intpte(l4tab[l4_table_offset(RO_MPT_VIRT_START)]) )
     {
-        l4tab[l4_table_offset(RO_MPT_VIRT_START)] =
-            idle_pg_table[l4_table_offset(RO_MPT_VIRT_START)];
+        l4e_write(&l4tab[l4_table_offset(RO_MPT_VIRT_START)],
+                  idle_pg_table[l4_table_offset(RO_MPT_VIRT_START)]);
         ret = true;
     }
     unmap_domain_page(l4tab);
@@ -1760,7 +1764,7 @@ void zap_ro_mpt(mfn_t mfn)
 {
     l4_pgentry_t *l4tab = map_domain_page(mfn);
 
-    l4tab[l4_table_offset(RO_MPT_VIRT_START)] = l4e_empty();
+    l4e_write(&l4tab[l4_table_offset(RO_MPT_VIRT_START)], l4e_empty());
     unmap_domain_page(l4tab);
 }
 
@@ -1828,6 +1832,9 @@ static int alloc_l4_table(struct page_info *page)
 
     if ( !rc )
     {
+#ifdef CONFIG_SVA
+        sva_declare_l4_page(pfn << PAGE_SHIFT);
+#endif
         init_xen_l4_slots(pl4e, _mfn(pfn),
                           d, INVALID_MFN, VM_ASSIST(d, m2p_strict));
         atomic_inc(&d->arch.pv.nr_l4_pages);
@@ -1842,6 +1849,10 @@ static void free_l1_table(struct page_info *page)
     struct domain *d = page_get_owner(page);
     l1_pgentry_t *pl1e;
     unsigned int  i;
+
+#ifdef CONFIG_SVA
+    sva_remove_page(page_to_maddr(page));
+#endif
 
     pl1e = __map_domain_page(page);
 
@@ -1859,6 +1870,10 @@ static int free_l2_table(struct page_info *page)
     l2_pgentry_t *pl2e;
     int rc = 0, partial = page->partial_pte;
     unsigned int i = page->nr_validated_ptes - !partial;
+
+#ifdef CONFIG_SVA
+    sva_remove_page(page_to_maddr(page));
+#endif
 
     pl2e = map_domain_page(_mfn(pfn));
 
@@ -1911,6 +1926,10 @@ static int free_l3_table(struct page_info *page)
     int rc = 0, partial = page->partial_pte;
     unsigned int  i = page->nr_validated_ptes - !partial;
 
+#ifdef CONFIG_SVA
+    sva_remove_page(page_to_maddr(page));
+#endif
+
     pl3e = map_domain_page(_mfn(pfn));
 
     for ( ; ; )
@@ -1956,6 +1975,10 @@ static int free_l4_table(struct page_info *page)
     l4_pgentry_t *pl4e = map_domain_page(_mfn(pfn));
     int rc = 0, partial = page->partial_pte;
     unsigned int  i = page->nr_validated_ptes - !partial;
+
+#ifdef CONFIG_SVA
+    sva_remove_page(page_to_maddr(page));
+#endif
 
     do {
         if ( is_guest_l4_slot(d, i) )
