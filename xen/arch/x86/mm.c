@@ -4903,6 +4903,10 @@ void *alloc_xen_pagetable(void)
 
 void free_xen_pagetable(void *v)
 {
+#ifdef CONFIG_SVA
+    sva_remove_page(__pa(v));
+#endif
+
     if ( system_state != SYS_STATE_early_boot )
         free_xenheap_page(v);
 }
