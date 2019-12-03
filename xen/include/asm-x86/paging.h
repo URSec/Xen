@@ -308,8 +308,7 @@ static inline bool paging_write_guest_entry(
                                                                 gmfn);
 #endif
 #ifdef CONFIG_SVA
-    update_pte_sva(p, new);
-    return 1;
+    return update_pte_sva(p, new);
 #else
     return !__copy_to_user(p, &new, sizeof(new));
 #endif

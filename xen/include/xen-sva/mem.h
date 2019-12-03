@@ -54,7 +54,8 @@ void *get_page_table_entry_sva(uintptr_t virt_addr, int level);
  *
  * @param entry The page table entry to update
  * @param new   The new entry to write
+ * @return      True if the update succeeded, false otherwise
  */
-void update_pte_sva(intpte_t *entry, intpte_t new);
+bool update_pte_sva(intpte_t *entry, intpte_t new);
 
 #endif /* _XEN_SVA_MEM_H */
