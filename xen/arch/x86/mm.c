@@ -1437,6 +1437,10 @@ static int alloc_l1_table(struct page_info *page)
         pl1e[i] = adjust_guest_l1e(pl1e[i], d);
     }
 
+#ifdef CONFIG_SVA
+    sva_declare_l1_page(page_to_maddr(page));
+#endif
+
     unmap_domain_page(pl1e);
     return 0;
 
@@ -1557,6 +1561,12 @@ static int alloc_l2_table(struct page_info *page, unsigned long type)
     if ( !rc && (type & PGT_pae_xen_l2) )
         init_xen_pae_l2_slots(pl2e, d);
 
+#ifdef CONFIG_SVA
+    if (rc == 0) {
+        sva_declare_l2_page(page_to_maddr(page));
+    }
+#endif
+
     unmap_domain_page(pl2e);
     return rc;
 }
@@ -1644,6 +1654,12 @@ static int alloc_l3_table(struct page_info *page)
         while ( i-- > 0 )
             pl3e[i] = unadjust_guest_l3e(pl3e[i], d);
     }
+
+#ifdef CONFIG_SVA
+    if (rc == 0) {
+        sva_declare_l3_page(page_to_maddr(page));
+    }
+#endif
 
     unmap_domain_page(pl3e);
     return rc;
@@ -1833,7 +1849,7 @@ static int alloc_l4_table(struct page_info *page)
     if ( !rc )
     {
 #ifdef CONFIG_SVA
-        sva_declare_l4_page(pfn << PAGE_SHIFT);
+        sva_declare_l4_page(page_to_maddr(page));
 #endif
         init_xen_l4_slots(pl4e, _mfn(pfn),
                           d, INVALID_MFN, VM_ASSIST(d, m2p_strict));
