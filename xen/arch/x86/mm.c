@@ -1866,10 +1866,6 @@ static void free_l1_table(struct page_info *page)
     l1_pgentry_t *pl1e;
     unsigned int  i;
 
-#ifdef CONFIG_SVA
-    sva_remove_page(page_to_maddr(page));
-#endif
-
     pl1e = __map_domain_page(page);
 
     for ( i = 0; i < L1_PAGETABLE_ENTRIES; i++ )
@@ -1886,10 +1882,6 @@ static int free_l2_table(struct page_info *page)
     l2_pgentry_t *pl2e;
     int rc = 0, partial = page->partial_pte;
     unsigned int i = page->nr_validated_ptes - !partial;
-
-#ifdef CONFIG_SVA
-    sva_remove_page(page_to_maddr(page));
-#endif
 
     pl2e = map_domain_page(_mfn(pfn));
 
@@ -1942,10 +1934,6 @@ static int free_l3_table(struct page_info *page)
     int rc = 0, partial = page->partial_pte;
     unsigned int  i = page->nr_validated_ptes - !partial;
 
-#ifdef CONFIG_SVA
-    sva_remove_page(page_to_maddr(page));
-#endif
-
     pl3e = map_domain_page(_mfn(pfn));
 
     for ( ; ; )
@@ -1991,10 +1979,6 @@ static int free_l4_table(struct page_info *page)
     l4_pgentry_t *pl4e = map_domain_page(_mfn(pfn));
     int rc = 0, partial = page->partial_pte;
     unsigned int  i = page->nr_validated_ptes - !partial;
-
-#ifdef CONFIG_SVA
-    sva_remove_page(page_to_maddr(page));
-#endif
 
     do {
         if ( is_guest_l4_slot(d, i) )
@@ -2693,6 +2677,9 @@ int free_page_type(struct page_info *page, unsigned long type,
     {
         page->nr_validated_ptes = 1U << PAGETABLE_ORDER;
         page->partial_pte = 0;
+#ifdef CONFIG_SVA
+        sva_remove_page(page_to_maddr(page));
+#endif
     }
 
     switch ( type & PGT_type_mask )
@@ -2719,6 +2706,40 @@ int free_page_type(struct page_info *page, unsigned long type,
         rc = -EINVAL;
         BUG();
     }
+
+#ifdef CONFIG_SVA
+    /*
+     * If rc == -EINTR, then we got here without invalidating anything and our
+     * caller will set `PGT_validated`, meaning that this page may end up
+     * getting used as a page table and the thread that does so would have no
+     * way of knowing that the page needs to be redeclared to SVA. Even if no
+     * other thread attempts to use the page, we will still attempt to
+     * undeclare the page again when we are resumed.  We therefore need to
+     * redeclare the page to SVA here.
+     *
+     * TODO: There's probably a way we could keep track whether or not a page
+     * table has been declared to SVA. However, the way `_get_page_type` is
+     * structured makes that tricky.
+     */
+    if (rc == -EINTR) {
+        switch (type & PGT_type_mask) {
+        case PGT_l1_page_table:
+            sva_declare_l1_page(page_to_maddr(page));
+            break;
+        case PGT_l2_page_table:
+            sva_declare_l2_page(page_to_maddr(page));
+            break;
+        case PGT_l3_page_table:
+            sva_declare_l3_page(page_to_maddr(page));
+            break;
+        case PGT_l4_page_table:
+            sva_declare_l4_page(page_to_maddr(page));
+            break;
+        default:
+            ASSERT_UNREACHABLE();
+        }
+    }
+#endif
 
     return rc;
 #else
