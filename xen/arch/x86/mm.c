@@ -5894,7 +5894,7 @@ void destroy_perdomain_mapping(struct domain *d, unsigned long va,
                           (_PAGE_PRESENT | _PAGE_AVAIL0)) ==
                          (_PAGE_PRESENT | _PAGE_AVAIL0) )
                         free_domheap_page(l1e_get_page(l1tab[i]));
-                    l1tab[i] = l1e_empty();
+                    l1e_write(&l1tab[i], l1e_empty());
                 }
 
                 unmap_domain_page(l1tab);
@@ -5950,16 +5950,25 @@ void free_perdomain_mappings(struct domain *d)
                         unmap_domain_page(l1tab);
                     }
 
+#ifdef CONFIG_SVA
+                    sva_remove_page(page_to_maddr(l1pg));
+#endif
                     if ( is_xen_heap_page(l1pg) )
                         free_xenheap_page(page_to_virt(l1pg));
                     else
                         free_domheap_page(l1pg);
                 }
 
+#ifdef CONFIG_SVA
+            sva_remove_page(page_to_maddr(l2pg));
+#endif
             unmap_domain_page(l2tab);
             free_domheap_page(l2pg);
         }
 
+#ifdef CONFIG_SVA
+    sva_remove_page(page_to_maddr(d->arch.perdomain_l3_pg));
+#endif
     unmap_domain_page(l3tab);
     free_domheap_page(d->arch.perdomain_l3_pg);
     d->arch.perdomain_l3_pg = NULL;
