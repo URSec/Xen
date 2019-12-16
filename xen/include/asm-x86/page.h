@@ -25,6 +25,14 @@
 
 #include <asm/x86_64/page.h>
 
+#ifndef __ASSEMBLY__
+
+/* Get direct integer representation of a pte's contents (intpte_t). */
+#define l1e_get_intpte(x)          ((x).l1)
+#define l2e_get_intpte(x)          ((x).l2)
+#define l3e_get_intpte(x)          ((x).l3)
+#define l4e_get_intpte(x)          ((x).l4)
+
 /* Read a pte atomically from memory. */
 #define l1e_read_atomic(l1ep) \
     l1e_from_intpte(pte_read_atomic(&l1e_get_intpte(*(l1ep))))
@@ -37,14 +45,58 @@
 
 #ifdef CONFIG_SVA
 
-#define l1e_write_atomic(l1ep, l1e) \
-    sva_update_l1_mapping((pte_t*)l1ep, l1e_get_intpte(l1e))
-#define l2e_write_atomic(l2ep, l2e) \
-    sva_update_l2_mapping((pde_t*)l2ep, l2e_get_intpte(l2e))
-#define l3e_write_atomic(l3ep, l3e) \
-    sva_update_l3_mapping((pdpte_t*)l3ep, l3e_get_intpte(l3e))
-#define l4e_write_atomic(l4ep, l4e) \
-    sva_update_l4_mapping((pml4e_t*)l4ep, l4e_get_intpte(l4e))
+/**
+ * Flag indicating whether SVA's MMU control has been initialized.
+ */
+extern bool mm_sva_init;
+
+static inline void l1e_write_atomic(l1_pgentry_t *l1ep, l1_pgentry_t l1e)
+{
+    if (mm_sva_init) {
+        sva_update_l1_mapping((pte_t*)l1ep, l1e_get_intpte(l1e));
+    } else {
+        /*
+         * SVA MM init happens before SMP init, so safe to be non-atomic.
+         */
+        *ACCESS_ONCE(l1ep) = l1e;
+    }
+}
+
+static inline void l2e_write_atomic(l2_pgentry_t *l2ep, l2_pgentry_t l2e)
+{
+    if (mm_sva_init) {
+        sva_update_l2_mapping((pte_t*)l2ep, l2e_get_intpte(l2e));
+    } else {
+        /*
+         * SVA MM init happens before SMP init, so safe to be non-atomic.
+         */
+        *ACCESS_ONCE(l2ep) = l2e;
+    }
+}
+
+static inline void l3e_write_atomic(l3_pgentry_t *l3ep, l3_pgentry_t l3e)
+{
+    if (mm_sva_init) {
+        sva_update_l3_mapping((pte_t*)l3ep, l3e_get_intpte(l3e));
+    } else {
+        /*
+         * SVA MM init happens before SMP init, so safe to be non-atomic.
+         */
+        *ACCESS_ONCE(l3ep) = l3e;
+    }
+}
+
+static inline void l4e_write_atomic(l4_pgentry_t *l4ep, l4_pgentry_t l4e)
+{
+    if (mm_sva_init) {
+        sva_update_l4_mapping((pte_t*)l4ep, l4e_get_intpte(l4e));
+    } else {
+        /*
+         * SVA MM init happens before SMP init, so safe to be non-atomic.
+         */
+        *ACCESS_ONCE(l4ep) = l4e;
+    }
+}
 
 #define l1e_write(l1ep, l1e) \
     l1e_write_atomic(l1ep, l1e)
@@ -82,11 +134,7 @@
 
 #endif /* CONFIG_SVA */
 
-/* Get direct integer representation of a pte's contents (intpte_t). */
-#define l1e_get_intpte(x)          ((x).l1)
-#define l2e_get_intpte(x)          ((x).l2)
-#define l3e_get_intpte(x)          ((x).l3)
-#define l4e_get_intpte(x)          ((x).l4)
+#endif /* !__ASSEMBLY__ */
 
 /* Get pfn mapped by pte (unsigned long). */
 #define l1e_get_pfn(x)             \
@@ -399,13 +447,6 @@ void efi_update_l4_pgtable(unsigned int l4idx, l4_pgentry_t);
 #define MAP_SMALL_PAGES _PAGE_AVAIL0 /* don't use superpages mappings */
 
 #ifndef __ASSEMBLY__
-
-#ifdef CONFIG_SVA
-/**
- * Flag indicating whether SVA's MMU control has been initialized.
- */
-extern bool mm_sva_init;
-#endif
 
 /**
  * Make a page read-only in Xen's direct map.

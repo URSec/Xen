@@ -287,9 +287,18 @@ static inline unsigned long read_cr2(void)
 }
 
 #ifdef CONFIG_SVA
+/**
+ * Flag indicating whether SVA's MMU control has been initialized.
+ */
+extern bool mm_sva_init;
+
 static inline void write_cr3(unsigned long val)
 {
-    sva_mm_load_pgtable(val);
+    if (mm_sva_init) {
+        sva_mm_load_pgtable(val);
+    } else {
+        asm volatile ("mov %0, %%cr3" : : "r"(val) : "memory");
+    }
 }
 #else
 static inline void write_cr3(unsigned long val)

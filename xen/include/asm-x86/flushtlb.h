@@ -80,9 +80,20 @@ void new_tlbflush_clock_period(void);
 
 /* Read pagetable base. */
 #ifdef CONFIG_SVA
+/**
+ * Flag indicating whether SVA's MMU control has been initialized.
+ */
+extern bool mm_sva_init;
+
 static inline unsigned long read_cr3(void)
 {
-    return sva_mm_save_pgtable();
+    if (mm_sva_init) {
+        return sva_mm_save_pgtable();
+    } else {
+        unsigned long cr3;
+        asm volatile ("mov %%cr3, %0" : "=r" (cr3));
+        return cr3;
+    }
 }
 #else
 static inline unsigned long read_cr3(void)
