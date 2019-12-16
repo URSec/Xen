@@ -40,6 +40,8 @@ unsigned char __used SVAPTPages[1024][PAGE_SIZE] __attribute__((section("svamem"
 
 extern char __init_begin[], _sinittext[], _einittext[], __init_end[];
 
+bool __read_mostly mm_sva_init = false;
+
 uintptr_t provideSVAMemory(size_t size)
 {
     /*
@@ -167,13 +169,18 @@ void __init map_sva_static_data(void)
          : "=r"(start), "=r"(end));
 
     for (char* addr = start; addr < end; addr += SUPERPAGE_SIZE) {
+        int err;
         struct page_info *pg = alloc_domheap_pages(NULL, SUPERPAGE_ORDER, 0);
         BUG_ON(!pg);
         unmap_domain_page(memset(__map_domain_page(pg), 0, SUPERPAGE_SIZE));
-        int err = map_pages_to_xen((uintptr_t)addr,
-                                   page_to_mfn(pg),
-                                   SUPERPAGE_SIZE / PAGE_SIZE,
-                                   PAGE_HYPERVISOR_RW);
+
+        uintptr_t dmap_start = (uintptr_t)page_to_virt(pg);
+        err = destroy_xen_mappings(dmap_start, dmap_start + SUPERPAGE_SIZE);
+        BUG_ON(err);
+        err = map_pages_to_xen((uintptr_t)addr,
+                               page_to_mfn(pg),
+                               SUPERPAGE_SIZE / PAGE_SIZE,
+                               PAGE_HYPERVISOR_RW);
         BUG_ON(err);
     }
 }
@@ -281,4 +288,6 @@ void __init init_sva_mmu(void)
     BUG_ON(shatter_direct_map_superpages());
 
     sva_mmu_init();
+
+    mm_sva_init = true;
 }

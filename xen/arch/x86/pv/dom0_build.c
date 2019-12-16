@@ -633,6 +633,7 @@ int __init dom0_construct_pv(struct domain *d,
     l4tab += l4_table_offset(v_start);
     pfn = alloc_spfn;
 
+    paddr_t mpt_alloc_l4 = mpt_alloc - PAGE_SIZE;
     paddr_t mpt_alloc_l3 = mpt_alloc;
     paddr_t mpt_alloc_l2 =
         mpt_alloc_l3 + NR(v_start, v_end, L4_PAGETABLE_SHIFT) * PAGE_SIZE;
@@ -698,8 +699,11 @@ int __init dom0_construct_pv(struct domain *d,
             mfn = pfn++;
         else
             mfn = initrd_mfn++;
-        l1e_write(l1tab, l1e_from_pfn(mfn, (!is_pv_32bit_domain(d) ?
-                                            L1_PROT : COMPAT_L1_PROT)));
+        int prot = !is_pv_32bit_domain(d) ? L1_PROT : COMPAT_L1_PROT;
+        if (mfn >= PFN_DOWN(mpt_alloc_l4) && mfn < PFN_UP(mpt_alloc_end)) {
+            prot &= ~_PAGE_RW;
+        }
+        l1e_write(l1tab, l1e_from_pfn(mfn, prot));
         l1tab++;
 
         page = mfn_to_page(_mfn(mfn));

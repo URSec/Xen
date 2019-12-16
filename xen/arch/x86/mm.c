@@ -1437,9 +1437,7 @@ static int alloc_l1_table(struct page_info *page)
         pl1e[i] = adjust_guest_l1e(pl1e[i], d);
     }
 
-#ifdef CONFIG_SVA
-    sva_declare_l1_page(page_to_maddr(page));
-#endif
+    declare_l1_table(pl1e);
 
     unmap_domain_page(pl1e);
     return 0;
@@ -1561,11 +1559,9 @@ static int alloc_l2_table(struct page_info *page, unsigned long type)
     if ( !rc && (type & PGT_pae_xen_l2) )
         init_xen_pae_l2_slots(pl2e, d);
 
-#ifdef CONFIG_SVA
     if (rc == 0) {
-        sva_declare_l2_page(page_to_maddr(page));
+        declare_l2_table(pl2e);
     }
-#endif
 
     unmap_domain_page(pl2e);
     return rc;
@@ -1655,11 +1651,9 @@ static int alloc_l3_table(struct page_info *page)
             pl3e[i] = unadjust_guest_l3e(pl3e[i], d);
     }
 
-#ifdef CONFIG_SVA
     if (rc == 0) {
-        sva_declare_l3_page(page_to_maddr(page));
+        declare_l3_table(pl3e);
     }
-#endif
 
     unmap_domain_page(pl3e);
     return rc;
@@ -1848,9 +1842,7 @@ static int alloc_l4_table(struct page_info *page)
 
     if ( !rc )
     {
-#ifdef CONFIG_SVA
-        sva_declare_l4_page(page_to_maddr(page));
-#endif
+        declare_l4_table(pl4e);
         init_xen_l4_slots(pl4e, _mfn(pfn),
                           d, INVALID_MFN, VM_ASSIST(d, m2p_strict));
         atomic_inc(&d->arch.pv.nr_l4_pages);
@@ -2677,9 +2669,7 @@ int free_page_type(struct page_info *page, unsigned long type,
     {
         page->nr_validated_ptes = 1U << PAGETABLE_ORDER;
         page->partial_pte = 0;
-#ifdef CONFIG_SVA
-        sva_remove_page(page_to_maddr(page));
-#endif
+        undeclare_page_table(page_to_virt(page));
     }
 
     switch ( type & PGT_type_mask )
@@ -2724,16 +2714,16 @@ int free_page_type(struct page_info *page, unsigned long type,
     if (rc == -EINTR) {
         switch (type & PGT_type_mask) {
         case PGT_l1_page_table:
-            sva_declare_l1_page(page_to_maddr(page));
+            declare_l1_table(page_to_virt(page));
             break;
         case PGT_l2_page_table:
-            sva_declare_l2_page(page_to_maddr(page));
+            declare_l2_table(page_to_virt(page));
             break;
         case PGT_l3_page_table:
-            sva_declare_l3_page(page_to_maddr(page));
+            declare_l3_table(page_to_virt(page));
             break;
         case PGT_l4_page_table:
-            sva_declare_l4_page(page_to_maddr(page));
+            declare_l4_table(page_to_virt(page));
             break;
         default:
             ASSERT_UNREACHABLE();
@@ -4963,9 +4953,7 @@ void *alloc_xen_pagetable(void)
 
 void free_xen_pagetable(void *v)
 {
-#ifdef CONFIG_SVA
-    sva_remove_page(__pa(v));
-#endif
+    undeclare_page_table(v);
 
     if ( system_state != SYS_STATE_early_boot )
         free_xenheap_page(v);
@@ -5704,6 +5692,20 @@ int destroy_xen_mappings(unsigned long s, unsigned long e)
     return modify_xen_mappings(s, e, _PAGE_NONE);
 }
 
+int xen_dmap_make_ro(void *page)
+{
+    return modify_xen_mappings((uintptr_t)page,
+                               (uintptr_t)page + PAGE_SIZE,
+                               PAGE_HYPERVISOR_RO);
+}
+
+int xen_dmap_make_rw(void *page)
+{
+    return modify_xen_mappings((uintptr_t)page,
+                               (uintptr_t)page + PAGE_SIZE,
+                               PAGE_HYPERVISOR_RW);
+}
+
 void __set_fixmap(
     enum fixed_addresses idx, unsigned long mfn, unsigned long flags)
 {
@@ -5947,28 +5949,22 @@ void free_perdomain_mappings(struct domain *d)
                                  (_PAGE_PRESENT | _PAGE_AVAIL0) )
                                 free_domheap_page(l1e_get_page(l1tab[k]));
 
+                        undeclare_page_table(l1tab);
                         unmap_domain_page(l1tab);
                     }
 
-#ifdef CONFIG_SVA
-                    sva_remove_page(page_to_maddr(l1pg));
-#endif
                     if ( is_xen_heap_page(l1pg) )
                         free_xenheap_page(page_to_virt(l1pg));
                     else
                         free_domheap_page(l1pg);
                 }
 
-#ifdef CONFIG_SVA
-            sva_remove_page(page_to_maddr(l2pg));
-#endif
+            undeclare_page_table(l2tab);
             unmap_domain_page(l2tab);
             free_domheap_page(l2pg);
         }
 
-#ifdef CONFIG_SVA
-    sva_remove_page(page_to_maddr(d->arch.perdomain_l3_pg));
-#endif
+    undeclare_page_table(l3tab);
     unmap_domain_page(l3tab);
     free_domheap_page(d->arch.perdomain_l3_pg);
     d->arch.perdomain_l3_pg = NULL;

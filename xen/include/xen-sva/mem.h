@@ -28,6 +28,14 @@
 #include <sva/mmu_intrinsics.h>
 
 /**
+ * Flag indicating if SVA's MMU control has been initialized.
+ *
+ * If this flag is false, then Xen should use native mechanisms to perform MMU
+ * updates.
+ */
+extern bool mm_sva_init;
+
+/**
  * Map SVA's static data into the secure memory area
  */
 void __init map_sva_static_data(void);

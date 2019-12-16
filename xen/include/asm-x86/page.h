@@ -400,36 +400,94 @@ void efi_update_l4_pgtable(unsigned int l4idx, l4_pgentry_t);
 
 #ifndef __ASSEMBLY__
 
+#ifdef CONFIG_SVA
+/**
+ * Flag indicating whether SVA's MMU control has been initialized.
+ */
+extern bool mm_sva_init;
+#endif
+
+/**
+ * Make a page read-only in Xen's direct map.
+ */
+int xen_dmap_make_ro(void *page);
+
+/**
+ * Make a page read-write in Xen's direct map.
+ */
+int xen_dmap_make_rw(void *page);
+
+static inline void declare_l1_table(l1_pgentry_t *l1_table)
+{
+#ifdef CONFIG_SVA
+    if (mm_sva_init) {
+        ASSERT(xen_dmap_make_ro(l1_table) == 0);
+        sva_declare_l1_page(__pa(l1_table));
+    }
+#endif
+}
+
+static inline void declare_l2_table(l2_pgentry_t *l2_table)
+{
+#ifdef CONFIG_SVA
+    if (mm_sva_init) {
+        ASSERT(xen_dmap_make_ro(l2_table) == 0);
+        sva_declare_l2_page(__pa(l2_table));
+    }
+#endif
+}
+
+static inline void declare_l3_table(l3_pgentry_t *l3_table)
+{
+#ifdef CONFIG_SVA
+    if (mm_sva_init) {
+        ASSERT(xen_dmap_make_ro(l3_table) == 0);
+        sva_declare_l3_page(__pa(l3_table));
+    }
+#endif
+}
+
+static inline void declare_l4_table(l4_pgentry_t *l4_table)
+{
+#ifdef CONFIG_SVA
+    if (mm_sva_init) {
+        ASSERT(xen_dmap_make_ro(l4_table) == 0);
+        sva_declare_l4_page(__pa(l4_table));
+    }
+#endif
+}
+
+static inline void undeclare_page_table(void *pg_table) {
+#ifdef CONFIG_SVA
+    if (mm_sva_init) {
+        sva_remove_page(__pa(pg_table));
+        ASSERT(xen_dmap_make_rw(pg_table) == 0);
+    }
+#endif
+}
+
 static inline void declare_and_clear_l1_table(l1_pgentry_t *l1_table)
 {
-        clear_page(l1_table);
-#ifdef CONFIG_SVA
-        sva_declare_l1_page(__pa(l1_table));
-#endif
+    clear_page(l1_table);
+    declare_l1_table(l1_table);
 }
 
 static inline void declare_and_clear_l2_table(l2_pgentry_t *l2_table)
 {
-        clear_page(l2_table);
-#ifdef CONFIG_SVA
-        sva_declare_l2_page(__pa(l2_table));
-#endif
+    clear_page(l2_table);
+    declare_l2_table(l2_table);
 }
 
 static inline void declare_and_clear_l3_table(l3_pgentry_t *l3_table)
 {
-        clear_page(l3_table);
-#ifdef CONFIG_SVA
-        sva_declare_l3_page(__pa(l3_table));
-#endif
+    clear_page(l3_table);
+    declare_l3_table(l3_table);
 }
 
 static inline void declare_and_clear_l4_table(l4_pgentry_t *l4_table)
 {
-        clear_page(l4_table);
-#ifdef CONFIG_SVA
-        sva_declare_l4_page(__pa(l4_table));
-#endif
+    clear_page(l4_table);
+    declare_l4_table(l4_table);
 }
 
 /* Allocator functions for Xen pagetables. */
