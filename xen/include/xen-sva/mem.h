@@ -51,7 +51,7 @@ void __init init_sva_mmu(void);
  * @param virt_addr The virtual address for which to look up page table entries
  * @param level     The level of the page table which contains the entry (1-4)
  */
-void *get_page_table_entry_sva(uintptr_t virt_addr, int level);
+const void *get_page_table_entry_sva(uintptr_t virt_addr, int level);
 
 /**
  * Update a page table entry through SVA.

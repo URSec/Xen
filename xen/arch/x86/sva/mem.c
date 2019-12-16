@@ -99,19 +99,46 @@ void releaseSVAMemory(uintptr_t addr, size_t size)
     free_domheap_page(maddr_to_page(addr));
 }
 
-void *get_page_table_entry_sva(uintptr_t virt_addr, int level) {
-    switch (level) {
-    case 1:
-        return sva_get_l1_entry(virt_addr);
-    case 2:
-        return sva_get_l2_entry(virt_addr);
-    case 3:
-        return sva_get_l3_entry(virt_addr);
-    case 4:
-        return sva_get_l4_entry(virt_addr);
-    default:
-        BUG();
+const void *get_page_table_entry_sva(uintptr_t virt_addr, int level) {
+    const l4_pgentry_t *l4_table =
+        maddr_to_virt(read_cr3() & PADDR_MASK & PAGE_MASK);
+    const l4_pgentry_t *l4e = &l4_table[l4_table_offset(virt_addr)];
+    if (level == 4) {
+        return l4e;
     }
+    if (!(l4e_get_flags(*l4e) & _PAGE_PRESENT)) {
+        return NULL;
+    }
+
+    const l3_pgentry_t *l3_table = l4e_to_l3e(*l4e);
+    const l3_pgentry_t *l3e = &l3_table[l3_table_offset(virt_addr)];
+    if (level == 3) {
+        return l3e;
+    }
+    if (!(l3e_get_flags(*l3e) & _PAGE_PRESENT) ||
+        l3e_get_flags(*l3e) & _PAGE_PSE)
+    {
+        return NULL;
+    }
+
+    const l2_pgentry_t *l2_table = l3e_to_l2e(*l3e);
+    const l2_pgentry_t *l2e = &l2_table[l2_table_offset(virt_addr)];
+    if (level == 2) {
+        return l2e;
+    }
+    if (!(l2e_get_flags(*l2e) & _PAGE_PRESENT) ||
+        l2e_get_flags(*l2e) & _PAGE_PSE)
+    {
+        return NULL;
+    }
+
+    const l1_pgentry_t *l1_table = l2e_to_l1e(*l2e);
+    const l1_pgentry_t *l1e = &l1_table[l1_table_offset(virt_addr)];
+    if (level == 1) {
+        return l1e;
+    }
+
+    return NULL;
 }
 
 bool update_pte_sva(intpte_t *entry, intpte_t new) {
