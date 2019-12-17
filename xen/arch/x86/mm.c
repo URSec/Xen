@@ -5925,18 +5925,21 @@ void free_perdomain_mappings(struct domain *d)
         return;
 
     l3tab = __map_domain_page(d->arch.perdomain_l3_pg);
+    undeclare_page_table(l3tab);
 
     for ( i = 0; i < PERDOMAIN_SLOTS; ++i)
         if ( l3e_get_flags(l3tab[i]) & _PAGE_PRESENT )
         {
             struct page_info *l2pg = l3e_get_page(l3tab[i]);
             l2_pgentry_t *l2tab = __map_domain_page(l2pg);
+            undeclare_page_table(l2tab);
             unsigned int j;
 
             for ( j = 0; j < L2_PAGETABLE_ENTRIES; ++j )
                 if ( l2e_get_flags(l2tab[j]) & _PAGE_PRESENT )
                 {
                     struct page_info *l1pg = l2e_get_page(l2tab[j]);
+                    undeclare_page_table(page_to_virt(l1pg));
 
                     if ( l2e_get_flags(l2tab[j]) & _PAGE_AVAIL0 )
                     {
@@ -5949,7 +5952,6 @@ void free_perdomain_mappings(struct domain *d)
                                  (_PAGE_PRESENT | _PAGE_AVAIL0) )
                                 free_domheap_page(l1e_get_page(l1tab[k]));
 
-                        undeclare_page_table(l1tab);
                         unmap_domain_page(l1tab);
                     }
 
@@ -5959,12 +5961,10 @@ void free_perdomain_mappings(struct domain *d)
                         free_domheap_page(l1pg);
                 }
 
-            undeclare_page_table(l2tab);
             unmap_domain_page(l2tab);
             free_domheap_page(l2pg);
         }
 
-    undeclare_page_table(l3tab);
     unmap_domain_page(l3tab);
     free_domheap_page(d->arch.perdomain_l3_pg);
     d->arch.perdomain_l3_pg = NULL;
