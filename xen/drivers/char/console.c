@@ -1351,14 +1351,6 @@ void panic(const char *fmt, ...)
         machine_restart(5000);
 }
 
-void noreturn abort(void) {
-    BUG();
-}
-
-void sva_check_buffer(uintptr_t _buf, size_t _size) {
-    // Always succeed
-}
-
 /*
  * **************************************************************
  * ****************** Console suspend/resume ********************
