@@ -57,6 +57,8 @@ static always_inline __uint128_t cmpxchg16b_local_(
     __cmpxchg16b(_p, (void *)(o), (void *)(n));            \
 })
 
+#ifndef CONFIG_SVA
+
 /*
  * This function causes value _o to be changed to _n at location _p.
  * If this access causes a fault then we return 1, otherwise we return 0.
@@ -97,5 +99,7 @@ static always_inline __uint128_t cmpxchg16b_local_(
     }                                                                   \
     _rc;                                                                \
 })
+
+#endif
 
 #endif /* __X86_64_SYSTEM_H__ */
