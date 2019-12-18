@@ -31,6 +31,7 @@
 #include <asm/regs.h>
 
 #include <sva/interrupt.h>
+#include <sva/invoke.h>
 #include <sva/state.h>
 
 /* Hacky; we should make a builtin for this */
@@ -83,9 +84,17 @@ void do_trap_sva_shim(unsigned int vector)
         sva_was_privileged() ? &_regs : guest_cpu_user_regs();
 
     copy_regs_from_sva(regs);
-    local_irq_enable();
-    exception_table[vector](regs);
-    _ret_from_intr_sva(regs);
+    if (sva_iunwind()) {
+        /*
+         * Regs changed by unwind; recopy them.
+         */
+        copy_regs_from_sva(regs);
+        _ret_from_intr_sva(regs);
+    } else {
+        local_irq_enable();
+        exception_table[vector](regs);
+        _ret_from_intr_sva(regs);
+    }
 }
 
 void do_page_fault_sva_shim(unsigned int vector, void *fault_addr)
@@ -97,9 +106,17 @@ void do_page_fault_sva_shim(unsigned int vector, void *fault_addr)
         sva_was_privileged() ? &_regs : guest_cpu_user_regs();
 
     copy_regs_from_sva(regs);
-    local_irq_enable();
-    exception_table[vector](regs);
-    _ret_from_intr_sva(regs);
+    if (sva_iunwind()) {
+        /*
+         * Regs changed by unwind; recopy them.
+         */
+        copy_regs_from_sva(regs);
+        _ret_from_intr_sva(regs);
+    } else {
+        local_irq_enable();
+        exception_table[vector](regs);
+        _ret_from_intr_sva(regs);
+    }
 }
 
 void do_intr_sva_shim(unsigned int vector)
