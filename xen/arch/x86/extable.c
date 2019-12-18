@@ -12,7 +12,7 @@
 #include <xen/warning.h>
 
 #ifdef CONFIG_SVA
-#include <xen-sva/mem.h>
+#include <sva/invoke.h>
 #endif
 
 #define EX_FIELD(ptr, field) ((unsigned long)&(ptr)->field + (ptr)->field)
@@ -130,6 +130,74 @@ search_exception_table(const struct cpu_user_regs *regs)
 }
 
 #ifndef NDEBUG
+#ifdef CONFIG_SVA
+
+static unsigned long dont_cause_fault(
+    unsigned long _0, unsigned long _1, unsigned long _2)
+{
+    return 42;
+}
+
+static unsigned long cause_fault(
+    unsigned long _0, unsigned long _1, unsigned long _2)
+{
+    volatile int x = *(volatile int*)NULL;
+    (void)x;
+
+    return 0x42;
+}
+
+static int __init stub_selftest(void)
+{
+    bool fail = false;
+
+    char buf[128];
+    char other_buf[128];
+    unsigned long ret;
+
+    /*
+     * Test to make sure the invoke intrinsics work correctly in the
+     * non-exceptional case.
+     */
+    printk("Running invoke intrinsic selftests...\n");
+
+    ASSERT(sva_invokememset(buf, 0x42, sizeof(buf)) == sizeof(buf));
+
+    ASSERT(sva_invokememcpy(other_buf, buf, sizeof(buf)) == sizeof(buf));
+
+    ASSERT(other_buf[0] == 0x42 && other_buf[127] == 0x42);
+
+    ASSERT(!sva_invoke(0, 0, 0, &ret, dont_cause_fault));
+
+    ASSERT(ret == 42);
+
+    /*
+     * Test to make sure the invoke intrinsics properly recover from
+     * exceptions.
+     */
+    printk("Running stub recovery selftests...\n");
+
+    if (sva_invokememset(NULL, 0x42, PAGE_SIZE) > 0) {
+        fail = true;
+    }
+
+    if (sva_invokememcpy(NULL, NULL, PAGE_SIZE) > 0) {
+        fail = true;
+    }
+
+    if (!sva_invoke(0, 0, 0, &ret, cause_fault)) {
+        fail = true;
+    }
+
+    if (fail) {
+        warning_add("SELFTEST FAILURE: CORRECT BEHAVIOR CANNOT BE GUARANTEED\n");
+    }
+
+    return 0;
+}
+
+#else
+
 static int __init stub_selftest(void)
 {
     static const struct {
@@ -160,14 +228,8 @@ static int __init stub_selftest(void)
                        (addr & ~PAGE_MASK);
         union stub_exception_token res = { .raw = ~0 };
 
-#ifdef CONFIG_SVA
-        sva_unprotect_code_page(ptr);
-#endif
         memset(ptr, 0xcc, STUB_BUF_SIZE / 2);
         memcpy(ptr, tests[i].opc, ARRAY_SIZE(tests[i].opc));
-#ifdef CONFIG_SVA
-        sva_protect_code_page(ptr);
-#endif
         unmap_domain_page(ptr);
 
         asm volatile ( "INDIRECT_CALL %[stb]\n"
@@ -198,8 +260,12 @@ static int __init stub_selftest(void)
 
     return 0;
 }
+
+#endif /* CONFIG_SVA */
+
 __initcall(stub_selftest);
-#endif
+
+#endif /* !NDEBUG */
 
 unsigned long
 search_pre_exception_table(struct cpu_user_regs *regs)
