@@ -137,6 +137,7 @@ extern void __put_user_bad(void);
 struct __large_struct { unsigned long buf[100]; };
 #define __m(x) (*(const struct __large_struct *)(x))
 
+#ifndef CONFIG_SVA
 /*
  * Tell gcc we read from memory instead of writing: this is because
  * we do not write to any memory gcc knows about, so there are no
@@ -170,6 +171,7 @@ struct __large_struct { unsigned long buf[100]; };
 		: "=r"(err), ltype (x)					\
 		: "m"(__m(addr)), "i"(errret), "0"(err));		\
 	clac()
+#endif
 
 /**
  * __copy_to_user: - Copy a block of data into user space, with less checking

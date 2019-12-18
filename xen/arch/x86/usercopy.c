@@ -10,6 +10,26 @@
 #include <xen/sched.h>
 #include <asm/uaccess.h>
 
+#ifdef CONFIG_SVA
+#include <sva/invoke.h>
+#endif
+
+#ifdef CONFIG_SVA
+
+unsigned __copy_to_user_ll(void __user *to, const void *from, unsigned n)
+{
+    size_t copied = sva_invokememcpy(to, from, n);
+    return n - copied;
+}
+
+unsigned __copy_from_user_ll(void *to, const void __user *from, unsigned n)
+{
+    size_t copied = sva_invokememcpy(to, from, n);
+    return n - copied;
+}
+
+#else
+
 unsigned __copy_to_user_ll(void __user *to, const void *from, unsigned n)
 {
     unsigned dummy;
@@ -94,6 +114,8 @@ unsigned __copy_from_user_ll(void *to, const void __user *from, unsigned n)
     return n;
 }
 
+#endif
+
 /**
  * copy_to_user: - Copy a block of data into user space.
  * @to:   Destination address, in user space.
@@ -113,6 +135,20 @@ unsigned copy_to_user(void __user *to, const void *from, unsigned n)
         n = __copy_to_user(to, from, n);
     return n;
 }
+
+#ifdef CONFIG_SVA
+
+unsigned clear_user(void __user *to, unsigned n)
+{
+    if (access_ok(to, n)) {
+        size_t copied = sva_invokememset(to, 0, n);
+        return n - copied;
+    } else {
+        return n;
+    }
+}
+
+#else
 
 /**
  * clear_user: - Zero a block of memory in user space.
@@ -148,6 +184,8 @@ unsigned clear_user(void __user *to, unsigned n)
 
     return n;
 }
+
+#endif
 
 /**
  * copy_from_user: - Copy a block of data from user space.

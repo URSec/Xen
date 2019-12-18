@@ -57,6 +57,30 @@ extern void *xlat_malloc(unsigned long *xlat_page_current, size_t size);
     (likely((count) < (~0U / (size))) && \
      compat_access_ok(addr, 0 + (count) * (size)))
 
+#ifdef CONFIG_SVA
+
+#define __put_user_size(x, ptr, size, retval, errret)                   \
+({                                                                      \
+    typeof(x) __x = x;                                                  \
+    if (__copy_to_user_ll((ptr), &__x, (size))) {                       \
+        retval = errret;                                                \
+    } else {                                                            \
+        retval = 0;                                                     \
+    }                                                                   \
+})
+
+#define __get_user_size(x, ptr, size, retval, errret)                   \
+({                                                                      \
+    if (__copy_from_user_ll(&(x), (ptr), (size))) {                     \
+        memset(&(x), 0, (size));                                        \
+        retval = errret;                                                \
+    } else {                                                            \
+        retval = 0;                                                     \
+    }                                                                   \
+})
+
+#else
+
 #define __put_user_size(x,ptr,size,retval,errret)			\
 do {									\
 	retval = 0;							\
@@ -80,5 +104,7 @@ do {									\
 	default: __get_user_bad();					\
 	}								\
 } while (0)
+
+#endif
 
 #endif /* __X86_64_UACCESS_H */
