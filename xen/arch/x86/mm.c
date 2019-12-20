@@ -1728,29 +1728,52 @@ void init_xen_l4_slots(l4_pgentry_t *l4t, mfn_t l4mfn,
          */
         l4_pgentry_t *next;
 
+        size_t last_slot =
+            ROOT_PAGETABLE_FIRST_XEN_SLOT + root_pgt_pv_xen_slots;
+#ifdef CONFIG_SVA
+        if (last_slot > l4_table_offset(SECMEMSTART)) {
+            last_slot = l4_table_offset(SECMEMSTART);
+        }
+#endif
+
+        size_t slots = last_slot - l4_table_offset(XEN_VIRT_START);
+
         copy_l4_table(&l4t[l4_table_offset(XEN_VIRT_START)],
                       &idle_pg_table[l4_table_offset(XEN_VIRT_START)],
-                      (ROOT_PAGETABLE_FIRST_XEN_SLOT + root_pgt_pv_xen_slots -
-                       l4_table_offset(XEN_VIRT_START)));
+                      slots);
 
-        next = &l4t[ROOT_PAGETABLE_FIRST_XEN_SLOT + root_pgt_pv_xen_slots];
+        next = &l4t[last_slot];
 
         if ( l4e_get_intpte(split_l4e) )
             l4e_write(next++, split_l4e);
 
-        clear_l4_table(next, &l4t[ROOT_PAGETABLE_LAST_XEN_SLOT + 1] - next);
+        size_t end_slot = ROOT_PAGETABLE_LAST_XEN_SLOT + 1;
+#ifdef CONFIG_SVA
+        if (end_slot > l4_table_offset(SECMEMSTART)) {
+            end_slot = l4_table_offset(SECMEMSTART);
+        }
+#endif
+
+        clear_l4_table(next, &l4t[end_slot] - next);
     }
     else
 #endif
     {
-        unsigned int slots = (short_directmap
-                              ? ROOT_PAGETABLE_PV_XEN_SLOTS
-                              : ROOT_PAGETABLE_XEN_SLOTS);
+        size_t last_slot =
+            ROOT_PAGETABLE_FIRST_XEN_SLOT +
+                (short_directmap ?
+                 ROOT_PAGETABLE_PV_XEN_SLOTS :
+                 ROOT_PAGETABLE_XEN_SLOTS);
+#ifdef CONFIG_SVA
+        if (last_slot > l4_table_offset(SECMEMSTART)) {
+            last_slot = l4_table_offset(SECMEMSTART);
+        }
+#endif
+        unsigned int slots = last_slot - l4_table_offset(XEN_VIRT_START);
 
         copy_l4_table(&l4t[l4_table_offset(XEN_VIRT_START)],
                       &idle_pg_table[l4_table_offset(XEN_VIRT_START)],
-                      (ROOT_PAGETABLE_FIRST_XEN_SLOT + slots -
-                       l4_table_offset(XEN_VIRT_START)));
+                      slots);
     }
 }
 
