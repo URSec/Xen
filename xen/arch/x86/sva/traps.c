@@ -34,13 +34,6 @@
 #include <sva/invoke.h>
 #include <sva/state.h>
 
-/* Hacky; we should make a builtin for this */
-#define current_rip() ({                                    \
-    uintptr_t __rip;                                        \
-    asm volatile ("leaq 1f(%%rip), %0; 1:" : "=r"(__rip));  \
-    __rip;                                                  \
-})
-
 extern void sva_cpu_user_regs(struct cpu_user_regs *regs,
                               unsigned long *fs_base,
                               unsigned long *gs_base);
@@ -164,30 +157,9 @@ void sva_syscall(void)
     _ret_from_intr_sva(regs);
 }
 
-static void store_guest_stack(uintptr_t rsp, void *val, size_t size) {
-    if (unlikely(copy_to_user((void*)rsp, val, size) != 0)) {
-        clac();
-        show_page_walk(rsp);
-        asm_domain_crash_synchronous(current_rip());
-    }
-}
-
 static void make_bounce_frame(struct cpu_user_regs *regs, struct vcpu *curr,
                               struct trap_bounce *tb)
 {
-    struct bounce_frame {
-        uint64_t rcx;
-        uint64_t r11;
-        uint64_t error_code;
-        uint64_t rip;
-        uint16_t cs;
-        uint16_t _pad;
-        uint32_t saved_upcall_mask;
-        uint64_t rflags;
-        uint64_t rsp;
-        uint64_t ss;
-    };
-
     uintptr_t guest_rsp;
     uint16_t guest_cs = regs->cs;
 
@@ -200,53 +172,71 @@ static void make_bounce_frame(struct cpu_user_regs *regs, struct vcpu *curr,
     }
     guest_rsp &= ~0xfUL; // Align the stack
 
-    if (unlikely(HYPERVISOR_VIRT_START < guest_rsp &&
-                 guest_rsp < HYPERVISOR_VIRT_END + sizeof(struct bounce_frame)))
-    {
-        asm_domain_crash_synchronous(current_rip());
+    char bounce_frame[8 * sizeof(uint64_t)];
+    uint64_t *cur = (uint64_t*)bounce_frame;
+
+    /*
+     * `%rcx` and `%r11`, specific to Xen bounce frames.
+     */
+    *cur++ = regs->rcx;
+    *cur++ = regs->r11;
+
+    /*
+     * Error code (if applicable), same as a native x86 interrupt frame.
+     */
+    if (tb->flags & TBF_EXCEPTION_ERRCODE) {
+        *cur++ = tb->error_code;
     }
 
-    struct bounce_frame bf = {
-        .rcx = regs->rcx,
-        .r11 = regs->r11,
-        .error_code = tb->flags & TBF_EXCEPTION_ERRCODE ? tb->error_code : 0,
-        .rip = regs->rip,
-        .cs = guest_cs,
-        ._pad = 0,
-        .saved_upcall_mask = vcpu_info(curr, evtchn_upcall_mask),
-        .rflags = regs->rflags & ~(X86_EFLAGS_IF|X86_EFLAGS_IOPL),
-        .rsp = regs->rsp,
-        .ss = regs->ss,
-    };
+    /*
+     * Saved `%rip` and `%cs`, like native.
+     */
+    *cur++ = regs->rip;
+    *(uint32_t*)cur = (uint32_t)guest_cs;
 
-    bf.rflags |= !vcpu_info(curr, evtchn_upcall_mask) ? X86_EFLAGS_IF : 0;
-    bf.rflags |= VM_ASSIST(curr->domain, architectural_iopl) ? curr->arch.pv.iopl : 0;
+    /*
+     * Saved upcall mask: Xen's version of `%eflags.IF`. We slot this in to the
+     * high bytes of the saved %cs selector (which are unused in a native
+     * interrupt frame).
+     */
+    *((uint32_t*)cur + 1) = vcpu_info(curr, evtchn_upcall_mask);
+    cur++;
 
+    /*
+     * Saved `%rflags`, like native.
+     */
+    uint64_t new_rflags = regs->rflags & ~(X86_EFLAGS_IF|X86_EFLAGS_IOPL);
+    if (!vcpu_info(curr, evtchn_upcall_mask)) {
+        new_rflags |= X86_EFLAGS_IF;
+    }
+    if (VM_ASSIST(curr->domain, architectural_iopl)) {
+        new_rflags |= curr->arch.pv.iopl;
+    }
+    *cur++ = new_rflags;
+
+    /*
+     * Saved `%rsp` and `%ss`, like native.
+     */
+    *cur++ = regs->rsp;
+    *cur++ = regs->ss;
+
+    size_t bf_size = (char*)cur - bounce_frame;
+    guest_rsp -= bf_size;
+    size_t rem = copy_to_user((void*)guest_rsp, bounce_frame, bf_size);
+    if (rem) {
+    bad_guest_stack:
+        show_page_walk(guest_rsp + (bf_size - rem));
+        asm_domain_crash_synchronous((uintptr_t)&&bad_guest_stack);
+    }
+
+    /*
+     * Disable events if this bounce frame is interrupt-like.
+     */
     vcpu_info(curr, evtchn_upcall_mask) |= !!(tb->flags & TBF_INTERRUPT);
 
-#define STORE_GUEST_STACK(val) do {                         \
-        guest_rsp -= sizeof(val);                           \
-        store_guest_stack(guest_rsp, &(val), sizeof(val));  \
-    } while (0)
-
-    stac();
-    STORE_GUEST_STACK(bf.ss);
-    STORE_GUEST_STACK(bf.rsp);
-    STORE_GUEST_STACK(bf.rflags);
-    STORE_GUEST_STACK(bf.saved_upcall_mask);
-    //guest_rsp -= sizeof(bf._pad); // No need to store padding
-    STORE_GUEST_STACK(bf._pad);
-    STORE_GUEST_STACK(bf.cs);
-    STORE_GUEST_STACK(bf.rip);
-    if (tb->flags & TBF_EXCEPTION_ERRCODE) {
-        STORE_GUEST_STACK(bf.error_code);
-    }
-    STORE_GUEST_STACK(bf.r11);
-    STORE_GUEST_STACK(bf.rcx);
-    clac();
-
-#undef STORE_GUEST_STACK
-
+    /*
+     * Set up the guest to execute the trap handler when we return to it.
+     */
     regs->entry_vector |= TRAP_syscall;
     regs->eflags &= ~(X86_EFLAGS_AC | X86_EFLAGS_VM | X86_EFLAGS_RF |
                       X86_EFLAGS_NT | X86_EFLAGS_TF);
@@ -254,7 +244,8 @@ static void make_bounce_frame(struct cpu_user_regs *regs, struct vcpu *curr,
     regs->rsp = guest_rsp;
     regs->cs = FLAT_KERNEL_CS;
     if (unlikely(tb->eip == 0)) {
-        asm_domain_crash_synchronous(current_rip());
+    no_trap_handler:
+        asm_domain_crash_synchronous((uintptr_t)&&no_trap_handler);
     }
     regs->rip = tb->eip;
 }
