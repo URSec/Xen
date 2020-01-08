@@ -162,13 +162,14 @@ static void make_bounce_frame(struct cpu_user_regs *regs, struct vcpu *curr,
 {
     uintptr_t guest_rsp;
     uint16_t guest_cs = regs->cs;
+    bool switch_mode = !(curr->arch.flags & TF_kernel_mode);
 
-    if (curr->arch.flags & TF_kernel_mode) {
-        guest_rsp = regs->rsp;
-        guest_cs &= ~0x3;
-    } else {
+    if (switch_mode) {
         toggle_guest_mode(curr);
         guest_rsp = curr->arch.pv.kernel_sp;
+    } else {
+        guest_rsp = regs->rsp;
+        guest_cs &= ~0x3;
     }
 
     /*
@@ -231,9 +232,15 @@ static void make_bounce_frame(struct cpu_user_regs *regs, struct vcpu *curr,
     *cur++ = regs->ss;
 
     size_t bf_size = (char*)cur - bounce_frame;
-    if (unlikely(!sva_ialloca_newstack(guest_rsp, FLAT_KERNEL_SS,
-                                       bounce_frame, bf_size, 4)))
-    {
+
+    bool failed;
+    if (switch_mode) {
+        failed = !sva_ialloca_newstack(guest_rsp, FLAT_KERNEL_SS,
+                                       bounce_frame, bf_size, 4);
+    } else {
+        failed = !sva_ialloca(bounce_frame, bf_size, 4);
+    }
+    if (unlikely(failed)) {
     bad_ialloca:
         show_page_walk(guest_rsp);
         if (PFN_DOWN(guest_rsp) != PFN_DOWN(guest_rsp - bf_size)) {
