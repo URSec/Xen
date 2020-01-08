@@ -247,11 +247,6 @@ static void make_bounce_frame(struct cpu_user_regs *regs, struct vcpu *curr,
     }
 
     /*
-     * HACK: See above.
-     */
-    copy_regs_from_sva(regs);
-
-    /*
      * Disable events if this bounce frame is interrupt-like.
      */
     vcpu_info(curr, evtchn_upcall_mask) |= !!(tb->flags & TBF_INTERRUPT);
@@ -260,14 +255,20 @@ static void make_bounce_frame(struct cpu_user_regs *regs, struct vcpu *curr,
      * Set up the guest to execute the trap handler when we return to it.
      */
     regs->entry_vector |= TRAP_syscall;
-    regs->eflags &= ~(X86_EFLAGS_AC | X86_EFLAGS_VM | X86_EFLAGS_RF |
-                      X86_EFLAGS_NT | X86_EFLAGS_TF);
-    regs->cs = FLAT_KERNEL_CS;
+
     if (unlikely(tb->eip == 0)) {
     no_trap_handler:
         asm_domain_crash_synchronous((uintptr_t)&&no_trap_handler);
     }
-    regs->rip = tb->eip;
+    if (unlikely(!sva_ipush_function(tb->eip, FLAT_KERNEL_CS))) {
+    bad_ipush_function:
+        asm_domain_crash_synchronous((uintptr_t)&&bad_ipush_function);
+    }
+
+    /*
+     * HACK: See above.
+     */
+    copy_regs_from_sva(regs);
 }
 
 static void test_events(struct cpu_user_regs *regs, struct vcpu *curr)
