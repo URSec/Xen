@@ -170,7 +170,17 @@ static void make_bounce_frame(struct cpu_user_regs *regs, struct vcpu *curr,
         toggle_guest_mode(curr);
         guest_rsp = curr->arch.pv.kernel_sp;
     }
-    guest_rsp &= ~0xfUL; // Align the stack
+
+    /*
+     * HACK: Since we are using SVA's interrupt context manipulation
+     * intrinsics, we need to copy the current version of the interrupt context
+     * back to SVA. This shouldn't be necessary, but currently is because we
+     * are directly modifying the interrupt context in other parts of Xen.
+     *
+     * NB: This needs to be after the call to `toggle_guest_mode` in order to
+     * properly update the guest's `%gs.base`.
+     */
+    copy_regs_to_sva(regs);
 
     char bounce_frame[8 * sizeof(uint64_t)];
     uint64_t *cur = (uint64_t*)bounce_frame;
@@ -221,13 +231,25 @@ static void make_bounce_frame(struct cpu_user_regs *regs, struct vcpu *curr,
     *cur++ = regs->ss;
 
     size_t bf_size = (char*)cur - bounce_frame;
-    guest_rsp -= bf_size;
-    size_t rem = copy_to_user((void*)guest_rsp, bounce_frame, bf_size);
-    if (rem) {
-    bad_guest_stack:
-        show_page_walk(guest_rsp + (bf_size - rem));
-        asm_domain_crash_synchronous((uintptr_t)&&bad_guest_stack);
+    if (unlikely(!sva_ialloca_newstack(guest_rsp, FLAT_KERNEL_SS,
+                                       bounce_frame, bf_size, 4)))
+    {
+    bad_ialloca:
+        show_page_walk(guest_rsp);
+        if (PFN_DOWN(guest_rsp) != PFN_DOWN(guest_rsp - bf_size)) {
+            /*
+             * We don't know which part of the ialloca failed, so show the page
+             * walk for both guest stack pages.
+             */
+            show_page_walk(guest_rsp - bf_size);
+        }
+        asm_domain_crash_synchronous((uintptr_t)&&bad_ialloca);
     }
+
+    /*
+     * HACK: See above.
+     */
+    copy_regs_from_sva(regs);
 
     /*
      * Disable events if this bounce frame is interrupt-like.
@@ -240,8 +262,6 @@ static void make_bounce_frame(struct cpu_user_regs *regs, struct vcpu *curr,
     regs->entry_vector |= TRAP_syscall;
     regs->eflags &= ~(X86_EFLAGS_AC | X86_EFLAGS_VM | X86_EFLAGS_RF |
                       X86_EFLAGS_NT | X86_EFLAGS_TF);
-    regs->ss = FLAT_KERNEL_SS;
-    regs->rsp = guest_rsp;
     regs->cs = FLAT_KERNEL_CS;
     if (unlikely(tb->eip == 0)) {
     no_trap_handler:
