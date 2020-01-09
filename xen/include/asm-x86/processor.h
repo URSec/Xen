@@ -65,6 +65,7 @@
 /* 'trap_bounce' flags values */
 #define TBF_EXCEPTION          1
 #define TBF_EXCEPTION_ERRCODE  2
+#define TBF_PUSH_SEGS          4
 #define TBF_INTERRUPT          8
 
 /* 'arch_vcpu' flags values */

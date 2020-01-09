@@ -29,6 +29,7 @@
 #include <asm/irq.h>
 #include <asm/processor.h>
 #include <asm/regs.h>
+#include <xen-sva/traps.h>
 
 #include <sva/interrupt.h>
 #include <sva/invoke.h>
@@ -41,8 +42,6 @@ extern void sva_icontext(struct cpu_user_regs *regs,
                               unsigned long *fs_base,
                               unsigned long *gs_base);
 
-static void make_bounce_frame(struct cpu_user_regs *regs, struct vcpu *curr,
-                              struct trap_bounce *tb);
 static void test_events(struct cpu_user_regs *regs, struct vcpu *curr);
 static void _ret_from_intr_sva(struct cpu_user_regs *regs);
 
@@ -157,9 +156,20 @@ void sva_syscall(void)
     _ret_from_intr_sva(regs);
 }
 
-static void make_bounce_frame(struct cpu_user_regs *regs, struct vcpu *curr,
-                              struct trap_bounce *tb)
+static void make_bounce_frame_32(struct cpu_user_regs *regs, struct vcpu *curr,
+                                 struct trap_bounce *tb)
 {
+    ASSERT(is_pv_32bit_vcpu(curr));
+
+    // TODO
+    BUG();
+}
+
+static void make_bounce_frame_64(struct cpu_user_regs *regs, struct vcpu *curr,
+                                 struct trap_bounce *tb)
+{
+    ASSERT(!is_pv_32bit_vcpu(curr));
+
     uintptr_t guest_rsp;
     uint16_t guest_cs = regs->cs;
     bool switch_mode = !(curr->arch.flags & TF_kernel_mode);
@@ -183,7 +193,7 @@ static void make_bounce_frame(struct cpu_user_regs *regs, struct vcpu *curr,
      */
     copy_regs_to_sva(regs);
 
-    char bounce_frame[8 * sizeof(uint64_t)];
+    char bounce_frame[12 * sizeof(uint64_t)];
     uint64_t *cur = (uint64_t*)bounce_frame;
 
     /*
@@ -191,6 +201,16 @@ static void make_bounce_frame(struct cpu_user_regs *regs, struct vcpu *curr,
      */
     *cur++ = regs->rcx;
     *cur++ = regs->r11;
+
+    /*
+     * Segments (if requested by caller), specific to Xen.
+     */
+    if (tb->flags & TBF_PUSH_SEGS) {
+        *cur++ = regs->ds;
+        *cur++ = regs->es;
+        *cur++ = regs->fs;
+        *cur++ = regs->gs;
+    }
 
     /*
      * Error code (if applicable), same as a native x86 interrupt frame.
@@ -254,15 +274,18 @@ static void make_bounce_frame(struct cpu_user_regs *regs, struct vcpu *curr,
     }
 
     /*
-     * Disable events if this bounce frame is interrupt-like.
+     * Disable events if requested.
+     *
+     * Note that `TBF_INTERRUPT` is likely in reference to the distinction
+     * between an x86 "interrupt gate" and "trap gate," of which only the
+     * former will disable interrupts. It does not seem to indicate that this
+     * bounce frame is necessarily for some kind of interrupt.
      */
     vcpu_info(curr, evtchn_upcall_mask) |= !!(tb->flags & TBF_INTERRUPT);
 
     /*
      * Set up the guest to execute the trap handler when we return to it.
      */
-    regs->entry_vector |= TRAP_syscall;
-
     if (unlikely(tb->eip == 0)) {
     no_trap_handler:
         asm_domain_crash_synchronous((uintptr_t)&&no_trap_handler);
@@ -276,6 +299,16 @@ static void make_bounce_frame(struct cpu_user_regs *regs, struct vcpu *curr,
      * HACK: See above.
      */
     copy_regs_from_sva(regs);
+}
+
+void make_bounce_frame(struct cpu_user_regs *regs, struct vcpu *curr,
+                       struct trap_bounce *tb)
+{
+    if (is_pv_32bit_vcpu(curr)) {
+        make_bounce_frame_32(regs, curr, tb);
+    } else {
+        make_bounce_frame_64(regs, curr, tb);
+    }
 }
 
 static void test_events(struct cpu_user_regs *regs, struct vcpu *curr)

@@ -25,4 +25,16 @@
  */
 void __init init_sva_traps(void);
 
+/**
+ * Create a bounce frame on the guest's stack.
+ *
+ * Will switch to guest kernel mode if the guest is currently in user mode.
+ *
+ * @param regs  The guest's saved registers
+ * @param curr  The vCPU on which to create the bounce frame
+ * @param tb    Information about the type of bounce frame to create
+ */
+void make_bounce_frame(struct cpu_user_regs *regs, struct vcpu *curr,
+                       struct trap_bounce *tb);
+
 #endif /* _XEN_SVA_TRAPS_H */
