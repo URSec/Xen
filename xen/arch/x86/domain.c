@@ -70,6 +70,10 @@
 #include <asm/pv/mm.h>
 #include <asm/spec_ctrl.h>
 
+#ifdef CONFIG_SVA
+#include <xen-sva/traps.h>
+#endif
+
 DEFINE_PER_CPU(struct vcpu *, curr_vcpu);
 
 static void default_idle(void);
@@ -1487,6 +1491,18 @@ static void load_segments(struct vcpu *n)
     {
         struct pv_vcpu *pv = &n->arch.pv;
         struct cpu_user_regs *regs = guest_cpu_user_regs();
+
+#ifdef CONFIG_SVA
+        struct trap_bounce tb = {
+            .eip = pv->failsafe_callback_eip,
+            .flags = TBF_PUSH_SEGS,
+        };
+        if (n->arch.vgc_flags & VGCF_failsafe_disables_events) {
+            tb.flags |= TBF_INTERRUPT;
+        }
+
+        make_bounce_frame(regs, n, &tb);
+#else
         unsigned long *rsp =
             (unsigned long *)(((n->arch.flags & TF_kernel_mode)
                                ? regs->rsp : pv->kernel_sp) & ~0xf);
@@ -1579,6 +1595,7 @@ static void load_segments(struct vcpu *n)
         regs->rsp           = (unsigned long)(rsp-11);
         regs->cs            = FLAT_KERNEL_CS;
         regs->rip           = pv->failsafe_callback_eip;
+#endif
     }
 }
 
