@@ -133,7 +133,34 @@ void sva_syscall(void)
 
     copy_regs_from_sva(regs);
     if (curr->arch.flags & TF_kernel_mode) {
+        bool is_iret = regs->rax == __HYPERVISOR_iret;
         pv_hypercall(regs);
+
+        /*
+         * Only iret hypercall should be making arbitrary register modifications.
+         *
+         * TODO: Modify iret to use SVA intrinsics (necessary intrinsics don't
+         *       yet exist).
+         */
+        if (is_iret) {
+            copy_regs_to_sva(regs);
+        } else {
+            BUG_ON(!sva_icontext_setretval(regs->rax));
+            BUG_ON(!sva_icontext_setsyscallargs((uint64_t[6]){
+                regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8, regs->r9 }));
+            if (curr->hcall_preempted) {
+                BUG_ON(!sva_icontext_restart());
+            }
+
+            /*
+             * `copy_regs_from_sva` may clobber our `%fs` and `%gs` bases.
+             */
+            uintptr_t fsbase = rdfsbase();
+            uintptr_t gsbase = rdgsbase();
+            copy_regs_from_sva(regs);
+            wrgsbase(gsbase);
+            wrfsbase(fsbase);
+        }
     } else {
         struct trap_bounce *tb = &curr->arch.pv.trap_bounce;
 
