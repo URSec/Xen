@@ -264,15 +264,18 @@ static void make_bounce_frame_64(struct cpu_user_regs *regs, struct vcpu *curr,
     } else {
         failed = true;
     }
+
+    size_t new_guest_rsp = (guest_rsp & ~0xf) - bf_size;
+
     if (unlikely(failed)) {
     bad_ialloca:
         show_page_walk(guest_rsp);
-        if (PFN_DOWN(guest_rsp) != PFN_DOWN(guest_rsp - bf_size)) {
+        if (PFN_DOWN(guest_rsp) != PFN_DOWN(new_guest_rsp)) {
             /*
              * We don't know which part of the ialloca failed, so show the page
              * walk for both guest stack pages.
              */
-            show_page_walk(guest_rsp - bf_size);
+            show_page_walk(new_guest_rsp);
         }
         asm_domain_crash_synchronous((uintptr_t)&&bad_ialloca);
     }
@@ -286,6 +289,12 @@ static void make_bounce_frame_64(struct cpu_user_regs *regs, struct vcpu *curr,
      * bounce frame is necessarily for some kind of interrupt.
      */
     vcpu_info(curr, evtchn_upcall_mask) |= !!(tb->flags & TBF_INTERRUPT);
+
+    /*
+     * If either of the calls below fail, we will crash the domain and dump
+     * guest state. Make sure we have the correct %rsp value when doing that.
+     */
+    regs->rsp = new_guest_rsp;
 
     /*
      * Set up the guest to execute the trap handler when we return to it.
