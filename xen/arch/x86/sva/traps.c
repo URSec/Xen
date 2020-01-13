@@ -254,11 +254,15 @@ static void make_bounce_frame_64(struct cpu_user_regs *regs, struct vcpu *curr,
     size_t bf_size = (char*)cur - bounce_frame;
 
     bool failed;
-    if (switch_mode) {
-        failed = !sva_ialloca_newstack(guest_rsp, FLAT_KERNEL_SS,
-                                       bounce_frame, bf_size, 4);
+    if (access_ok(guest_rsp, bf_size)) {
+        if (switch_mode) {
+            failed = !sva_ialloca_newstack(guest_rsp, FLAT_KERNEL_SS,
+                                           bounce_frame, bf_size, 4);
+        } else {
+            failed = !sva_ialloca(bounce_frame, bf_size, 4);
+        }
     } else {
-        failed = !sva_ialloca(bounce_frame, bf_size, 4);
+        failed = true;
     }
     if (unlikely(failed)) {
     bad_ialloca:
