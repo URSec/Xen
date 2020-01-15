@@ -564,6 +564,10 @@ struct arch_vcpu
     unsigned long dr7; /* Ideally int, but __vmread() needs long. */
     unsigned int dr6;
 
+#ifdef CONFIG_SVA
+    uintptr_t sva_thread_handle;
+#endif
+
     /* other state */
 
     unsigned long      flags; /* TF_ */

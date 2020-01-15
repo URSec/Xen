@@ -22,6 +22,10 @@
 #include <asm/pv/mm.h>
 #include <asm/setup.h>
 
+#ifdef CONFIG_SVA
+#include <sva/state.h>
+#endif
+
 /* Allow ring-3 access in long mode as guest cannot use ring 1 ... */
 #define BASE_PROT (_PAGE_PRESENT|_PAGE_RW|_PAGE_ACCESSED|_PAGE_USER)
 #define L1_PROT (BASE_PROT|_PAGE_GUEST_KERNEL)
@@ -934,6 +938,15 @@ int __init dom0_construct_pv(struct domain *d,
     regs->rsp = vstack_end;
     regs->rsi = vstartinfo_start;
     regs->eflags = X86_EFLAGS_IF;
+
+#ifdef CONFIG_SVA
+    v->arch.sva_thread_handle =
+        sva_create_icontext(regs->rip,
+                            regs->rdi,
+                            regs->rsi,
+                            regs->rdx,
+                            regs->rsp);
+#endif
 
     /*
      * We don't call arch_set_info_guest(), so some initialisation needs doing

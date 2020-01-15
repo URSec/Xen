@@ -71,6 +71,7 @@
 #include <asm/spec_ctrl.h>
 
 #ifdef CONFIG_SVA
+#include <sva/state.h>
 #include <xen-sva/traps.h>
 #endif
 
@@ -393,6 +394,11 @@ int arch_vcpu_create(struct vcpu *v)
 
         cpuid_policy_updated(v);
     }
+
+#ifdef CONFIG_SVA
+    // Actual guest registers will be filled in `arch_set_info_guest`
+    v->arch.sva_thread_handle = 0;
+#endif
 
     return rc;
 
@@ -874,6 +880,18 @@ int arch_set_info_guest(
                                c.cmp->trap_ctxt + i);
         }
     }
+
+#ifdef CONFIG_SVA
+    if (v->arch.sva_thread_handle != 0) {
+        sva_release_stack(v->arch.sva_thread_handle);
+    }
+    v->arch.sva_thread_handle =
+        sva_create_icontext(v->arch.user_regs.rip,
+                            v->arch.user_regs.rdi,
+                            v->arch.user_regs.rsi,
+                            v->arch.user_regs.rdx,
+                            v->arch.user_regs.rsp);
+#endif
 
     if ( is_hvm_domain(d) )
     {
