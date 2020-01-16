@@ -1067,25 +1067,9 @@ long do_set_segment_base(unsigned int which, unsigned long base)
             _ASM_EXTABLE(1b, 2b)
             : "+r" (base) );
 #else
-        uintptr_t saved_gsbase;
-        uintptr_t user_gsbase;
-        unsigned long flags;
-
-        local_irq_save(flags);
-        asm volatile (
-            "     rdgsbase %1         \n"
-            "1:   movl %k0, %%gs      \n"
-            "     rdgsbase %2         \n"
-            "     wrgsbase %1         \n"
-            "     mfence              \n"
-            ".section .fixup, \"ax\"  \n"
-            "2:   xorl %k0, %k0       \n"
-            "     jmp 1b              \n"
-            ".previous                \n"
-            _ASM_EXTABLE(1b, 2b)
-            : "+r" (base), "=&r" (saved_gsbase), "=r"(user_gsbase));
-        local_irq_restore(flags);
-        wrgsshadow(user_gsbase);
+        swapgs();
+        sva_load_segment(SVA_SEG_GS, base);
+        swapgs();
 #endif
         break;
     }

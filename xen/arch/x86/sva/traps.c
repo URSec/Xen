@@ -47,24 +47,12 @@ static void _ret_from_intr_sva(struct cpu_user_regs *regs);
 
 void copy_regs_from_sva(struct cpu_user_regs *regs)
 {
-    if (sva_was_privileged()) {
-        sva_cpu_user_regs(regs, NULL, NULL);
-    } else {
-        struct cpu_info *cpu_info = get_cpu_info();
-        sva_cpu_user_regs(regs, &cpu_info->guest_fs_base,
-                          &cpu_info->guest_gs_base);
-    }
+    sva_cpu_user_regs(regs, NULL, NULL);
 }
 
 void copy_regs_to_sva(struct cpu_user_regs *regs)
 {
-    if (!guest_mode(regs)) {
-        sva_icontext(regs, NULL, NULL);
-    } else {
-        ASSERT((regs->ss & ~0x3) != 0);
-        struct cpu_info *cpu_info = get_cpu_info();
-        sva_icontext(regs, &cpu_info->guest_fs_base, &cpu_info->guest_gs_base);
-    }
+    sva_icontext(regs, NULL, NULL);
 }
 
 void do_trap_sva_shim(unsigned int vector)
@@ -151,15 +139,7 @@ void sva_syscall(void)
             if (curr->hcall_preempted) {
                 BUG_ON(!sva_icontext_restart());
             }
-
-            /*
-             * `copy_regs_from_sva` may clobber our `%fs` and `%gs` bases.
-             */
-            uintptr_t fsbase = rdfsbase();
-            uintptr_t gsbase = rdgsbase();
             copy_regs_from_sva(regs);
-            wrgsbase(gsbase);
-            wrfsbase(fsbase);
         }
     } else {
         struct trap_bounce *tb = &curr->arch.pv.trap_bounce;

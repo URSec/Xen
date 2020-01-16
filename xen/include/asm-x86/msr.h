@@ -16,6 +16,10 @@
 #include <asm/current.h>
 #include <asm/processor.h>
 
+#ifdef CONFIG_SVA
+#include <sva/state.h>
+#endif
+
 #define rdmsr(msr,val1,val2) \
      __asm__ __volatile__("rdmsr" \
 			  : "=a" (val1), "=d" (val2) \
@@ -251,6 +255,8 @@ static inline void swapgs(void)
 
 #else /* !CONFIG_SVA */
 
+extern bool sva_load_segment(enum sva_segment_register segment, uintptr_t val);
+
 static inline unsigned long rdfsbase(void)
 {
     return get_cpu_info()->guest_fs_base;
@@ -269,11 +275,13 @@ static inline unsigned long rdgsshadow(void)
 static inline void wrfsbase(unsigned long base)
 {
     get_cpu_info()->guest_fs_base = base;
+    BUG_ON(!sva_load_segment(SVA_SEG_FS_BASE, base));
 }
 
 static inline void wrgsbase(unsigned long base)
 {
     get_cpu_info()->guest_gs_base = base;
+    BUG_ON(!sva_load_segment(SVA_SEG_GS_BASE, base));
 }
 
 static inline void wrgsshadow(unsigned long base)
@@ -283,10 +291,9 @@ static inline void wrgsshadow(unsigned long base)
 
 static inline void swapgs(void)
 {
-    struct cpu_info* cpu_info = get_cpu_info();
-    unsigned long tmp = cpu_info->guest_gs_base;
-    cpu_info->guest_gs_base = cpu_info->guest_gs_shadow;
-    cpu_info->guest_gs_shadow = tmp;
+    unsigned long old_base = rdgsbase();
+    wrgsbase(rdgsshadow());
+    wrgsshadow(old_base);
 }
 
 #define __rdfsbase rdfsbase

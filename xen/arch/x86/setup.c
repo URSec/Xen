@@ -1654,9 +1654,9 @@ void __init noreturn __start_xen(unsigned long mbi_p)
     iommu_setup();    /* setup iommu if available */
 
 #ifdef CONFIG_SVA
-    wrfsbase(0);
-    wrgsbase(0);
-    wrgsshadow(0);
+    get_cpu_info()->guest_fs_base = 0;
+    get_cpu_info()->guest_gs_base = 0;
+    get_cpu_info()->guest_gs_shadow = 0;
 
     map_sva_static_data();
 
