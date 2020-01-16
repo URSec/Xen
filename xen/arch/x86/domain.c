@@ -1274,6 +1274,7 @@ arch_do_vcpu_op(
     return rc;
 }
 
+#ifndef CONFIG_SVA
 /*
  * Loading a nul selector does not clear bases and limits on AMD CPUs. Be on
  * the safe side and re-initialize both to flat segment values before loading
@@ -1363,119 +1364,10 @@ static void load_segments(struct vcpu *n)
             dirty_segment_mask &= ~DIRTY_FS_BASE;
     }
 
-#ifdef CONFIG_SVA
-    /*
-     * Xen is loading the %gs selector here not because it actually wants to
-     * load the guest's user GS base right now, but because this gets the
-     * processor to do all the messy work of doing all the validity checks it
-     * normally does on a GDT/LDT entry when loading a segment.
-     *
-     * Non-SVA Xen doesn't make any use of the GS segment for itself, so it's
-     * perfectly fine with clobbering whatever value is currently there. The
-     * next if() block below this is going to ensure that the correct active
-     * and shadow GS bases are in place anyway for the PV guest's kernel and
-     * userspace (as appropriate depending on the guest's current privilege
-     * mode).
-     *
-     * Under SVA, however, this is a problem because SVA is using GS for
-     * itself whenever Xen is running. Instead of letting the PV guest claim
-     * both of the hardware "kernel" and "user" GS base slots, SVA claims the
-     * "kernel" one for its own use (which is active whenever Xen is
-     * running), and leaves the "user" one for the PV guest. The PV kernel
-     * and userspace (which both actually run in ring 3 on the hardware) must
-     * share the hardware "user" slot. Xen (when CONFIG_SVA is defined) makes
-     * this work by keeping the PV guest's user and kernel GS bases in fields
-     * in the guest's vCPU descriptor (struct cpu_info), and switching the
-     * desired one into the hardware "user" GS base slot as desired.
-     *
-     * So, in the CONFIG_SVA case, the code below must ensure that SVA's GS
-     * base value is restored after Xen temporarily loads the guest's %gs
-     * selector to read out its base value.
-     */
-#endif /* #ifdef CONFIG_SVA */
     /* Either selector != 0 ==> reload. */
     if ( unlikely((dirty_segment_mask & DIRTY_GS) | uregs->gs) && !fs_gs_done )
     {
-#ifdef CONFIG_SVA
-        /*
-         * Disable interrupts while we do this so we aren't caught with a
-         * nonsensical GSBASE if an interrupt comes in.
-         */
-        uintptr_t saved_rflags;
-        local_irq_save(saved_rflags);
-
-        /*
-         * FSGSBASE might have been disabled in CR4 on behalf of the PV
-         * kernel (which may or may not want it enabled).
-         *
-         * If this is the case, enable it so we can use it here, and make a
-         * note of this so we remember to switch it back when we're done.
-         */
-        int cr4_fsgsbase_was_disabled = 0, orig_cr4;
-        if ( !( (orig_cr4 = read_cr4()) & X86_CR4_FSGSBASE) )
-        {
-            cr4_fsgsbase_was_disabled = 1;
-            write_cr4(orig_cr4 | X86_CR4_FSGSBASE);
-        }
-
-        /*
-         * Save the currently active GS base value, which belongs to SVA (and
-         * represents the "kernel" GS base slot on the harware). We will need
-         * to restore it after temporarily loading the guest's %gs selector
-         * so SVA can read out its base value.
-         */
-        uintptr_t saved_gsbase;
-        asm volatile (
-            "rdgsbase %0  \n"
-            : "=r" (saved_gsbase));
-
-        /*
-         * Load the guest's %gs selector.
-         *
-         * Xen's loadsegment() macro will handle exceptions thrown by the
-         * hardware if for whatever reason the guest's segment fails to load.
-         * In that case it will fall back to loading a null selector.
-         */
         all_segs_okay &= loadsegment(gs, uregs->gs);
-
-        /*
-         * Read out the GS base value that just got loaded by the guest's
-         * selector.
-         *
-         * Then, restore the GS segment to the way SVA wants it - i.e., a
-         * null selector with the base value we saved above.
-         */
-        uintptr_t guest_gsbase;
-        asm volatile (
-            "rdgsbase %0    \n" /* save guest GS base */
-            "movl %k1, %%gs \n" /* load null selector for GS */
-            "wrgsbase %2    \n" /* restore SVA's GS base */
-            : "=&r" (guest_gsbase) : "r" (0), "r" (saved_gsbase));
-
-        /*
-         * Write the guest's GS base value into the "active GS base" slot in
-         * Xen's vCPU descriptor for the guest. This will ensure that the
-         * next if() block below this one behaves correctly when it calls
-         * Xen's wrgsbase(), wrgsshadow(), and swapgs() helper functions to
-         * shuffle around the active and shadow slots to arrange the guest's
-         * kernel and user GS bases accordingly. (With CONFIG_SVA, those
-         * helper functions manipulate the fields in the vCPU descriptor
-         * instead of the actual hardware active/shadow GS base registers.)
-         */
-        wrgsbase(guest_gsbase);
-
-        /*
-         * If we had to enable CR4.FSGSBASE above, disable it again so we're
-         * not surprising a PV kernel that wanted it that way.
-         */
-        if ( cr4_fsgsbase_was_disabled )
-            write_cr4(orig_cr4);
-
-        /* Re-enable interrupts. */
-        local_irq_restore(saved_rflags);
-#else /* vanilla Xen case (not #ifdef CONFIG_SVA) */
-        all_segs_okay &= loadsegment(gs, uregs->gs);
-#endif /* #ifdef CONFIG_SVA */
 
         /* non-nul selector updates gs_base_user */
         if ( uregs->gs & ~3 )
@@ -1510,17 +1402,6 @@ static void load_segments(struct vcpu *n)
         struct pv_vcpu *pv = &n->arch.pv;
         struct cpu_user_regs *regs = guest_cpu_user_regs();
 
-#ifdef CONFIG_SVA
-        struct trap_bounce tb = {
-            .eip = pv->failsafe_callback_eip,
-            .flags = TBF_PUSH_SEGS,
-        };
-        if (n->arch.vgc_flags & VGCF_failsafe_disables_events) {
-            tb.flags |= TBF_INTERRUPT;
-        }
-
-        make_bounce_frame(regs, n, &tb);
-#else
         unsigned long *rsp =
             (unsigned long *)(((n->arch.flags & TF_kernel_mode)
                                ? regs->rsp : pv->kernel_sp) & ~0xf);
@@ -1613,7 +1494,6 @@ static void load_segments(struct vcpu *n)
         regs->rsp           = (unsigned long)(rsp-11);
         regs->cs            = FLAT_KERNEL_CS;
         regs->rip           = pv->failsafe_callback_eip;
-#endif
     }
 }
 
@@ -1666,10 +1546,13 @@ static void save_segments(struct vcpu *v)
 
     this_cpu(dirty_segment_mask) = dirty_segment_mask;
 }
+#endif
 
 void paravirt_ctxt_switch_from(struct vcpu *v)
 {
+#ifndef CONFIG_SVA
     save_segments(v);
+#endif
 
     /*
      * Disable debug breakpoints. We do this aggressively because if we switch
@@ -1778,10 +1661,6 @@ static void __context_switch(void)
         pd->arch.ctxt_switch->from(p);
     }
 
-#ifdef CONFIG_SVA
-    BUG_ON(!sva_swap_user_integer(n->arch.sva_thread_handle, NULL));
-#endif
-
     /*
      * Mark this CPU in next domain's dirty cpumasks before calling
      * ctxt_switch_to(). This avoids a race on things like EPT flushing,
@@ -1806,14 +1685,6 @@ static void __context_switch(void)
         }
         vcpu_restore_fpu_nonlazy(n, false);
         nd->arch.ctxt_switch->to(n);
-
-#ifdef CONFIG_SVA
-        /*
-         * SVA's copy of the guest registers should be the same as our own, so we
-         * do this as a sanity check.
-         */
-        copy_regs_from_sva(guest_cpu_user_regs());
-#endif
     }
 
     psr_ctxt_switch_to(nd);
@@ -1857,6 +1728,47 @@ static void __context_switch(void)
 
         lgdt(&gdt_desc);
     }
+
+#ifdef CONFIG_SVA
+    /*
+     * Note: This needs to be done after loading the new GDT because it could
+     * load the guest's saved segment registers.
+     */
+    bool swap_succeeded = sva_swap_user_integer(n->arch.sva_thread_handle, NULL);
+
+    /*
+     * SVA's copy of the guest registers should be the same as our own, so we
+     * do this as a sanity check.
+     */
+    copy_regs_from_sva(stack_regs);
+
+    if (!swap_succeeded) {
+        if (sva_get_current() == n->arch.sva_thread_handle) {
+            /*
+             * SVA reported failure, but seems to have still performed the
+             * context switch. This likely means that loading the guest's
+             * segment registers faulted.
+             *
+             * TODO: Better error reporting from SVA
+             */
+
+            extern void sva_get_segments(struct cpu_user_regs *regs);
+
+            struct trap_bounce tb = {
+                .eip = n->arch.pv.failsafe_callback_eip,
+                .flags = TBF_PUSH_SEGS,
+            };
+            if (n->arch.vgc_flags & VGCF_failsafe_disables_events) {
+                tb.flags |= TBF_INTERRUPT;
+            }
+
+            sva_get_segments(stack_regs);
+            make_bounce_frame(stack_regs, n, &tb);
+        } else {
+            BUG();
+        }
+    }
+#endif
 
     if ( pd != nd )
         cpumask_clear_cpu(cpu, pd->dirty_cpumask);
@@ -1909,8 +1821,10 @@ void context_switch(struct vcpu *prev, struct vcpu *next)
         /* Re-enable interrupts before restoring state which may fault. */
         local_irq_enable();
 
+#ifndef CONFIG_SVA
         if ( is_pv_domain(nextd) )
             load_segments(next);
+#endif
 
         ctxt_switch_levelling(next);
 
