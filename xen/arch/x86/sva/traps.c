@@ -69,12 +69,12 @@ void do_trap_sva_shim(unsigned int vector)
          * Regs changed by unwind; recopy them.
          */
         copy_regs_from_sva(regs);
-        _ret_from_intr_sva(regs);
     } else {
         local_irq_enable();
         exception_table[vector](regs);
-        _ret_from_intr_sva(regs);
+        copy_regs_to_sva(regs);
     }
+    _ret_from_intr_sva(regs);
 }
 
 void do_page_fault_sva_shim(unsigned int vector, void *fault_addr)
@@ -91,12 +91,12 @@ void do_page_fault_sva_shim(unsigned int vector, void *fault_addr)
          * Regs changed by unwind; recopy them.
          */
         copy_regs_from_sva(regs);
-        _ret_from_intr_sva(regs);
     } else {
         local_irq_enable();
         exception_table[vector](regs);
-        _ret_from_intr_sva(regs);
+        copy_regs_to_sva(regs);
     }
+    _ret_from_intr_sva(regs);
 }
 
 void do_intr_sva_shim(unsigned int vector)
@@ -188,17 +188,6 @@ static void make_bounce_frame_64(struct cpu_user_regs *regs, struct vcpu *curr,
         guest_rsp = regs->rsp;
         guest_cs &= ~0x3;
     }
-
-    /*
-     * HACK: Since we are using SVA's interrupt context manipulation
-     * intrinsics, we need to copy the current version of the interrupt context
-     * back to SVA. This shouldn't be necessary, but currently is because we
-     * are directly modifying the interrupt context in other parts of Xen.
-     *
-     * NB: This needs to be after the call to `toggle_guest_mode` in order to
-     * properly update the guest's `%gs.base`.
-     */
-    copy_regs_to_sva(regs);
 
     char bounce_frame[12 * sizeof(uint64_t)];
     uint64_t *cur = (uint64_t*)bounce_frame;
@@ -316,7 +305,7 @@ static void make_bounce_frame_64(struct cpu_user_regs *regs, struct vcpu *curr,
     }
 
     /*
-     * HACK: See above.
+     * Ensure Xen has an up-to-date copy of the interrupt context.
      */
     copy_regs_from_sva(regs);
 }
@@ -380,8 +369,6 @@ static void _ret_from_intr_sva(struct cpu_user_regs *regs)
             BUG();
         }
     }
-
-    copy_regs_to_sva(regs);
 }
 
 void ret_from_intr_sva(void)

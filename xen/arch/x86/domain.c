@@ -1773,14 +1773,6 @@ static void __context_switch(void)
 
     if ( !is_idle_domain(pd) )
     {
-#ifdef CONFIG_SVA
-        /*
-         * For now, we still make modifications to registers. Make sure that those
-         * are copied to SVA before context switching.
-         */
-        copy_regs_to_sva(guest_cpu_user_regs());
-#endif
-
         memcpy(&p->arch.user_regs, stack_regs, CTXT_SWITCH_STACK_BYTES);
         vcpu_save_fpu(p);
         pd->arch.ctxt_switch->from(p);
