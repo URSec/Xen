@@ -1773,10 +1773,22 @@ static void __context_switch(void)
 
     if ( !is_idle_domain(pd) )
     {
+#ifdef CONFIG_SVA
+        /*
+         * For now, we still make modifications to registers. Make sure that those
+         * are copied to SVA before context switching.
+         */
+        copy_regs_to_sva(guest_cpu_user_regs());
+#endif
+
         memcpy(&p->arch.user_regs, stack_regs, CTXT_SWITCH_STACK_BYTES);
         vcpu_save_fpu(p);
         pd->arch.ctxt_switch->from(p);
     }
+
+#ifdef CONFIG_SVA
+    BUG_ON(!sva_swap_user_integer(n->arch.sva_thread_handle, NULL));
+#endif
 
     /*
      * Mark this CPU in next domain's dirty cpumasks before calling
@@ -1802,6 +1814,14 @@ static void __context_switch(void)
         }
         vcpu_restore_fpu_nonlazy(n, false);
         nd->arch.ctxt_switch->to(n);
+
+#ifdef CONFIG_SVA
+        /*
+         * SVA's copy of the guest registers should be the same as our own, so we
+         * do this as a sanity check.
+         */
+        copy_regs_from_sva(guest_cpu_user_regs());
+#endif
     }
 
     psr_ctxt_switch_to(nd);

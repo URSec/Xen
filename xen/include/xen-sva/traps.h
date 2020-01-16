@@ -26,6 +26,20 @@
 void __init init_sva_traps(void);
 
 /**
+ * Get the most recent interrupt context from SVA.
+ *
+ * @param regs  The local copy of the registers to populate
+ */
+void copy_regs_from_sva(struct cpu_user_regs *regs);
+
+/**
+ * Copy registers to the most recent interrupt context.
+ *
+ * @param regs  The registers to copy
+ */
+void copy_regs_to_sva(struct cpu_user_regs *regs);
+
+/**
  * Create a bounce frame on the guest's stack.
  *
  * Will switch to guest kernel mode if the guest is currently in user mode.

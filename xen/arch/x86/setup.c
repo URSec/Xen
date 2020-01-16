@@ -58,6 +58,7 @@
 
 #ifdef CONFIG_SVA
 #include <sva/init.h>
+#include <sva/state.h>
 #include <xen-sva/mem.h>
 #include <xen-sva/traps.h>
 #endif
@@ -1696,6 +1697,8 @@ void __init noreturn __start_xen(unsigned long mbi_p)
 #endif
 
     init_sva_mmu();
+
+    idle_vcpu[0]->arch.sva_thread_handle = sva_get_current();
 #endif
 
     smp_prepare_cpus();
