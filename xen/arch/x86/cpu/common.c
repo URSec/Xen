@@ -813,8 +813,10 @@ void cpu_init(void)
 	/* Install correct page table. */
 	write_ptbase(current);
 
+#ifndef CONFIG_SVA
 	/* Ensure FPU gets initialised for each domain. */
 	stts();
+#endif
 
 	/* Reset debug registers: */
 	write_debugreg(0, 0);

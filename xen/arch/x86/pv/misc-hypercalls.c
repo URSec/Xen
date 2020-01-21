@@ -36,6 +36,20 @@ unsigned long do_get_debugreg(int reg)
     return res == X86EMUL_OKAY ? val : -ENODEV;
 }
 
+#ifdef CONFIG_SVA
+
+long do_fpu_taskswitch(int set)
+{
+    if (set) {
+        return -EOPNOTSUPP;
+    } else {
+        /* The TS bit is already clear, so pretend we did something. */
+        return 0;
+    }
+}
+
+#else
+
 long do_fpu_taskswitch(int set)
 {
     struct vcpu *v = current;
@@ -54,6 +68,8 @@ long do_fpu_taskswitch(int set)
 
     return 0;
 }
+
+#endif
 
 /*
  * Used by hypercalls and the emulator.

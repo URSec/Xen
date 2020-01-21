@@ -28,14 +28,50 @@ struct ix87_env {
     uint16_t fds, _res6;
 };
 
+struct xsave_struct;
+
+#ifdef CONFIG_SVA
+/*
+ * FPU state is handled by SVA. Provide stubs for Xen FPU state functions.
+ */
+
+static inline void vcpu_restore_fpu_nonlazy(struct vcpu *__maybe_unused v,
+                                            bool __maybe_unused need_stts)
+{ }
+
+static inline void vcpu_restore_fpu_lazy(struct vcpu *__maybe_unused v)
+{ }
+
+static inline void vcpu_save_fpu(struct vcpu *__maybe_unused v)
+{ }
+
+static inline void save_fpu_enable(void)
+{ }
+
+static inline int vcpu_init_fpu(struct vcpu *__maybe_unused v)
+{
+    return 0;
+}
+
+static inline void vcpu_setup_fpu(struct vcpu *__maybe_unused v,
+                    struct xsave_struct *__maybe_unused xsave_area,
+                    const void *__maybe_unused data,
+                    unsigned int __maybe_unused fcw_default)
+{ }
+
+static inline void vcpu_destroy_fpu(struct vcpu *__maybe_unused v)
+{ }
+
+#else
 void vcpu_restore_fpu_nonlazy(struct vcpu *v, bool need_stts);
 void vcpu_restore_fpu_lazy(struct vcpu *v);
 void vcpu_save_fpu(struct vcpu *v);
 void save_fpu_enable(void);
 
 int vcpu_init_fpu(struct vcpu *v);
-struct xsave_struct;
 void vcpu_setup_fpu(struct vcpu *v, struct xsave_struct *xsave_area,
                     const void *data, unsigned int fcw_default);
 void vcpu_destroy_fpu(struct vcpu *v);
+#endif
+
 #endif /* __ASM_I386_I387_H */

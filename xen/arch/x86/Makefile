@@ -33,7 +33,6 @@ obj-y += extable.o
 obj-y += flushtlb.o
 obj-$(CONFIG_CRASH_DEBUG) += gdbstub.o
 obj-y += hypercall.o
-obj-y += i387.o
 obj-y += i8259.o
 obj-y += io_apic.o
 obj-$(CONFIG_LIVEPATCH) += alternative.o livepatch.o
@@ -73,6 +72,10 @@ obj-$(CONFIG_TBOOT) += tboot.o
 obj-y += hpet.o
 obj-y += vm_event.o
 obj-y += xstate.o
+
+fpu-y += i387.o
+fpu-$(CONFIG_SVA) :=
+obj-y += $(fpu-y)
 
 x86_emulate.o: x86_emulate/x86_emulate.c x86_emulate/x86_emulate.h
 
