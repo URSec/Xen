@@ -12,10 +12,10 @@
 })
 
 #define wbinvd() \
-    asm volatile ( "wbinvd" : : : "memory" )
+    __builtin_ia32_wbinvd()
 
 #define clflush(a) \
-    asm volatile ( "clflush (%0)" : : "r"(a) )
+    __builtin_ia32_clflush(a)
 
 #define nop() \
     asm volatile ( "nop" )

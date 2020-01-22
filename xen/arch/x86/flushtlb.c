@@ -276,11 +276,18 @@ unsigned int flush_area_local(const void *va, unsigned int flags)
         {
             alternative("", "sfence", X86_FEATURE_CLFLUSHOPT);
             for ( i = 0; i < sz; i += c->x86_clflush_size )
+#ifdef CONFIG_SVA
+                /*
+                 * Assume `clflushopt` is available.
+                 */
+                __builtin_ia32_clflushopt(&((const char *)va)[i]);
+#else
                 alternative_input(".byte " __stringify(NOP_DS_PREFIX) ";"
                                   " clflush %0",
                                   "data16 clflush %0",      /* clflushopt */
                                   X86_FEATURE_CLFLUSHOPT,
                                   "m" (((const char *)va)[i]));
+#endif
             flags &= ~FLUSH_CACHE;
         }
         else
