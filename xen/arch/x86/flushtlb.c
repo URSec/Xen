@@ -76,6 +76,52 @@ static void post_flush(u32 t)
     this_cpu(tlbflush_time) = t;
 }
 
+static void _flush_one_local(const void *va) {
+#ifdef CONFIG_SVA
+    sva_mm_flush_tlb_at(va);
+#else
+    /*
+     * We don't INVLPG multi-page regions because the 2M/4M/1G
+     * region may not have been mapped with a superpage. Also there
+     * are various errata surrounding INVLPG usage on superpages, and
+     * a full flush is in any case not *that* expensive.
+     */
+    if ( read_cr4() & X86_CR4_PCIDE )
+    {
+        unsigned long addr = (unsigned long)va;
+
+        /*
+         * Flush the addresses for all potential address spaces.
+         * We can't check the current domain for being subject to
+         * XPTI as current might be the idle vcpu while we still have
+         * some XPTI domain TLB entries.
+         * Using invpcid is okay here, as with PCID enabled we always
+         * have global pages disabled.
+         */
+        invpcid_flush_one(PCID_PV_PRIV, addr);
+        invpcid_flush_one(PCID_PV_USER, addr);
+        if ( opt_xpti_hwdom || opt_xpti_domu )
+        {
+            invpcid_flush_one(PCID_PV_PRIV | PCID_PV_XPTI, addr);
+            invpcid_flush_one(PCID_PV_USER | PCID_PV_XPTI, addr);
+        }
+    }
+    else
+        asm volatile ( "invlpg %0"
+                       : : "m" (*(const char *)(va)) : "memory" );
+#endif
+}
+
+static void _flush_all_local(void) {
+#ifdef CONFIG_SVA
+    sva_mm_flush_tlb_global();
+#else
+    unsigned long cr4 = read_cr4();
+    write_cr4(cr4 ^ X86_CR4_PGE);
+    write_cr4(cr4);
+#endif
+}
+
 static void do_tlb_flush(void)
 {
     unsigned long flags;
@@ -89,12 +135,7 @@ static void do_tlb_flush(void)
     if ( use_invpcid )
         invpcid_flush_all();
     else
-    {
-        unsigned long cr4 = read_cr4();
-
-        write_cr4(cr4 ^ X86_CR4_PGE);
-        write_cr4(cr4);
-    }
+        _flush_all_local();
 
     post_flush(t);
 
@@ -103,13 +144,30 @@ static void do_tlb_flush(void)
 
 void switch_cr3_cr4(unsigned long cr3, unsigned long cr4)
 {
-    unsigned long flags, old_cr4, old_pcid;
+    unsigned long flags;
     u32 t;
 
     /* This non-reentrant function is sometimes called in interrupt context. */
     local_irq_save(flags);
 
     t = pre_flush();
+
+#ifdef CONFIG_SVA
+    /*
+     * With SVA, we can't directly modify `%cr4`, and we don't get to use PCIDs
+     * anyway. Just perform a global flush.
+     */
+    _flush_all_local();
+
+    write_cr3(cr3);
+
+    /*
+     * Not sure if it's necessary to have two of these, but the native version
+     * will cause a global flush twice, so we're preserving that behavior.
+     */
+    _flush_all_local();
+#else
+    unsigned long old_cr4, old_pcid;
 
     old_cr4 = read_cr4();
     if ( old_cr4 & X86_CR4_PGE )
@@ -179,6 +237,7 @@ void switch_cr3_cr4(unsigned long cr3, unsigned long cr4)
          !(cr4 & X86_CR4_PGE) &&
          (old_cr4 & X86_CR4_PCIDE) <= (cr4 & X86_CR4_PCIDE) )
         invpcid_flush_single_context(old_pcid);
+#endif
 
     post_flush(t);
 
@@ -197,37 +256,7 @@ unsigned int flush_area_local(const void *va, unsigned int flags)
     if ( flags & (FLUSH_TLB|FLUSH_TLB_GLOBAL) )
     {
         if ( order == 0 )
-        {
-            /*
-             * We don't INVLPG multi-page regions because the 2M/4M/1G
-             * region may not have been mapped with a superpage. Also there
-             * are various errata surrounding INVLPG usage on superpages, and
-             * a full flush is in any case not *that* expensive.
-             */
-            if ( read_cr4() & X86_CR4_PCIDE )
-            {
-                unsigned long addr = (unsigned long)va;
-
-                /*
-                 * Flush the addresses for all potential address spaces.
-                 * We can't check the current domain for being subject to
-                 * XPTI as current might be the idle vcpu while we still have
-                 * some XPTI domain TLB entries.
-                 * Using invpcid is okay here, as with PCID enabled we always
-                 * have global pages disabled.
-                 */
-                invpcid_flush_one(PCID_PV_PRIV, addr);
-                invpcid_flush_one(PCID_PV_USER, addr);
-                if ( opt_xpti_hwdom || opt_xpti_domu )
-                {
-                    invpcid_flush_one(PCID_PV_PRIV | PCID_PV_XPTI, addr);
-                    invpcid_flush_one(PCID_PV_USER | PCID_PV_XPTI, addr);
-                }
-            }
-            else
-                asm volatile ( "invlpg %0"
-                               : : "m" (*(const char *)(va)) : "memory" );
-        }
+            _flush_one_local(va);
         else
             do_tlb_flush();
     }
