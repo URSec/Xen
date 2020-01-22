@@ -807,7 +807,13 @@ static int write_cr(unsigned int reg, unsigned long val,
         }
 
         curr->arch.pv.ctrlreg[4] = pv_fixup_guest_cr4(curr, val);
+        /*
+         * TODO: Come up with a better course of action here than just "pretend
+         * to do the thing."
+         */
+#ifndef CONFIG_SVA
         write_cr4(pv_make_cr4(curr));
+#endif
         ctxt_switch_levelling(curr);
         return X86EMUL_OKAY;
     }
