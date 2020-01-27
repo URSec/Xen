@@ -55,6 +55,24 @@ void copy_regs_to_sva(struct cpu_user_regs *regs)
     sva_icontext(regs, NULL, NULL);
 }
 
+/**
+ * Determine if a given exception is "NMI-like."
+ *
+ * This affects various aspects of how we handle the exception, such as whether
+ * or not we attempt to unwind and whether or not we enable interrupts.
+ */
+static bool is_nmi_like(unsigned int vector) {
+    switch (vector) {
+    case TRAP_nmi:
+    case TRAP_double_fault:
+    case TRAP_machine_check:
+        return true;
+    default:
+        return false;
+    }
+}
+
+
 void do_trap_sva_shim(unsigned int vector)
 {
     ASSERT(vector < 32 && vector != 14);
@@ -64,13 +82,16 @@ void do_trap_sva_shim(unsigned int vector)
         sva_was_privileged() ? &_regs : guest_cpu_user_regs();
 
     copy_regs_from_sva(regs);
-    if (sva_iunwind()) {
+    if (!is_nmi_like(vector) && sva_iunwind())
+    {
         /*
          * Regs changed by unwind; recopy them.
          */
         copy_regs_from_sva(regs);
     } else {
-        local_irq_enable();
+        if (!is_nmi_like(vector)) {
+            local_irq_enable();
+        }
         exception_table[vector](regs);
         copy_regs_to_sva(regs);
     }
