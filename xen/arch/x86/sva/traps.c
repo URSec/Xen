@@ -285,6 +285,7 @@ static void make_bounce_frame_64(struct cpu_user_regs *regs, struct vcpu *curr,
     size_t new_guest_rsp = (guest_rsp & ~0xf) - bf_size;
 
     if (unlikely(failed)) {
+        gprintk(XENLOG_ERR, "Unable to write to guest stack.\n");
     bad_ialloca:
         show_page_walk(guest_rsp);
         if (PFN_DOWN(guest_rsp) != PFN_DOWN(new_guest_rsp)) {
@@ -317,10 +318,12 @@ static void make_bounce_frame_64(struct cpu_user_regs *regs, struct vcpu *curr,
      * Set up the guest to execute the trap handler when we return to it.
      */
     if (unlikely(tb->eip == 0)) {
+        gprintk(XENLOG_ERR, "Trap bounce without handler address.\n");
     no_trap_handler:
         asm_domain_crash_synchronous((uintptr_t)&&no_trap_handler);
     }
     if (unlikely(!sva_ipush_function(tb->eip, FLAT_KERNEL_CS))) {
+        gprintk(XENLOG_ERR, "sva_ipush_function failed.\n");
     bad_ipush_function:
         asm_domain_crash_synchronous((uintptr_t)&&bad_ipush_function);
     }
