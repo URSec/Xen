@@ -1274,7 +1274,30 @@ arch_do_vcpu_op(
     return rc;
 }
 
-#ifndef CONFIG_SVA
+#ifdef CONFIG_SVA
+
+static void load_segments(struct vcpu *n)
+{
+    wrfsbase(n->arch.pv.fs_base);
+    wrgsbase(n->arch.pv.gs_base_user);
+    wrgsshadow(n->arch.pv.gs_base_kernel);
+    if (n->arch.flags & TF_kernel_mode) {
+        swapgs();
+    }
+}
+
+static void save_segments(struct vcpu *v)
+{
+    v->arch.pv.fs_base = rdfsbase();
+    if (v->arch.flags & TF_kernel_mode) {
+        v->arch.pv.gs_base_kernel = rdgsbase();
+    } else {
+        v->arch.pv.gs_base_user = rdgsbase();
+    }
+}
+
+#else
+
 /*
  * Loading a nul selector does not clear bases and limits on AMD CPUs. Be on
  * the safe side and re-initialize both to flat segment values before loading
@@ -1546,13 +1569,12 @@ static void save_segments(struct vcpu *v)
 
     this_cpu(dirty_segment_mask) = dirty_segment_mask;
 }
+
 #endif
 
 void paravirt_ctxt_switch_from(struct vcpu *v)
 {
-#ifndef CONFIG_SVA
     save_segments(v);
-#endif
 
     /*
      * Disable debug breakpoints. We do this aggressively because if we switch
@@ -1821,10 +1843,8 @@ void context_switch(struct vcpu *prev, struct vcpu *next)
         /* Re-enable interrupts before restoring state which may fault. */
         local_irq_enable();
 
-#ifndef CONFIG_SVA
         if ( is_pv_domain(nextd) )
             load_segments(next);
-#endif
 
         ctxt_switch_levelling(next);
 
