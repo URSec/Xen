@@ -1697,6 +1697,7 @@ static void __context_switch(void)
         memcpy(stack_regs, &n->arch.user_regs, CTXT_SWITCH_STACK_BYTES);
         if ( cpu_has_xsave )
         {
+#ifndef CONFIG_SVA
             u64 xcr0 = n->arch.xcr0 ?: XSTATE_FP_SSE;
 
             if ( xcr0 != get_xcr0() && !set_xcr0(xcr0) )
@@ -1704,6 +1705,7 @@ static void __context_switch(void)
 
             if ( cpu_has_xsaves && is_hvm_vcpu(n) )
                 set_msr_xss(n->arch.hvm.msr_xss);
+#endif
         }
         vcpu_restore_fpu_nonlazy(n, false);
         nd->arch.ctxt_switch->to(n);

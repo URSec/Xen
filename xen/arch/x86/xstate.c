@@ -724,6 +724,11 @@ int handle_xsetbv(u32 index, u64 new_bv)
     if ( (new_bv & ~xcr0_max) || !valid_xcr0(new_bv) )
         return -EINVAL;
 
+#ifndef CONFIG_SVA
+    /*
+     * TODO: Figure out a way SVA can handle this.
+     */
+
     /* By this point, new_bv really should be accepted by hardware. */
     if ( unlikely(!set_xcr0(new_bv)) )
     {
@@ -733,6 +738,7 @@ int handle_xsetbv(u32 index, u64 new_bv)
 
         return -EFAULT;
     }
+#endif
 
     mask = new_bv & ~curr->arch.xcr0_accum;
     curr->arch.xcr0 = new_bv;
@@ -742,6 +748,7 @@ int handle_xsetbv(u32 index, u64 new_bv)
     if ( new_bv & (XSTATE_NONLAZY & ~X86_XCR0_LWP) )
         curr->arch.nonlazy_xstate_used = 1;
 
+#ifndef CONFIG_SVA
     mask &= curr->fpu_dirtied ? ~XSTATE_FP_SSE : XSTATE_NONLAZY;
     if ( mask )
     {
@@ -762,6 +769,7 @@ int handle_xsetbv(u32 index, u64 new_bv)
         if ( cr0 & X86_CR0_TS )
             write_cr0(cr0);
     }
+#endif
 
     return 0;
 }
@@ -799,6 +807,7 @@ uint64_t read_bndcfgu(void)
     return xstate->xsave_hdr.xstate_bv & X86_XCR0_BNDCSR ? bndcsr->bndcfgu : 0;
 }
 
+#ifndef CONFIG_SVA
 void xstate_set_init(uint64_t mask)
 {
     unsigned long cr0 = read_cr0();
@@ -826,6 +835,7 @@ void xstate_set_init(uint64_t mask)
     if ( (~xcr0 & mask) && !set_xcr0(xcr0) )
         BUG();
 }
+#endif
 
 /*
  * Local variables:

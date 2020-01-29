@@ -95,7 +95,6 @@ uint64_t get_msr_xss(void);
 uint64_t read_bndcfgu(void);
 void xsave(struct vcpu *v, uint64_t mask);
 void xrstor(struct vcpu *v, uint64_t mask);
-void xstate_set_init(uint64_t mask);
 bool xsave_enabled(const struct vcpu *v);
 int __must_check validate_xstate(const struct domain *d,
                                  uint64_t xcr0, uint64_t xcr0_accum,
@@ -109,6 +108,15 @@ void xstate_free_save_area(struct vcpu *v);
 int xstate_alloc_save_area(struct vcpu *v);
 void xstate_init(struct cpuinfo_x86 *c);
 unsigned int xstate_ctxt_size(u64 xcr0);
+
+#ifdef CONFIG_SVA
+static inline void xstate_set_init(uint64_t mask)
+{
+    BUG();
+}
+#else
+void xstate_set_init(uint64_t mask);
+#endif
 
 static inline uint64_t xgetbv(unsigned int index)
 {

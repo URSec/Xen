@@ -2329,6 +2329,11 @@ static bool umip_active(struct x86_emulate_ctxt *ctxt,
 static void adjust_bnd(struct x86_emulate_ctxt *ctxt,
                        const struct x86_emulate_ops *ops, enum vex_pfx pfx)
 {
+#ifndef CONFIG_SVA
+    /*
+     * SVA doesn't handle this at the moment.
+     */
+
     uint64_t xcr0, bndcfg;
     int rc;
 
@@ -2356,6 +2361,7 @@ static void adjust_bnd(struct x86_emulate_ctxt *ctxt,
         xstate_set_init(X86_XCR0_BNDREGS);
     }
  done:;
+#endif
 }
 
 int x86emul_unhandleable_rw(
