@@ -404,14 +404,14 @@ void __init init_sva_traps(void)
 {
     for (int i = 0; i < 32; ++i) {
         if (i == 14 /* Page fault */) {
-            sva_register_memory_exception(i, do_page_fault_sva_shim);
+            BUG_ON(!sva_register_memory_exception(i, do_page_fault_sva_shim));
         } else {
-            sva_register_general_exception(i, do_trap_sva_shim);
+            BUG_ON(!sva_register_general_exception(i, do_trap_sva_shim));
         }
     }
 
     for (int i = 32; i < 256; ++i) {
-        sva_register_interrupt(i, do_intr_sva_shim);
+        BUG_ON(!sva_register_interrupt(i, do_intr_sva_shim));
     }
 }
 
