@@ -5715,18 +5715,31 @@ int destroy_xen_mappings(unsigned long s, unsigned long e)
     return modify_xen_mappings(s, e, _PAGE_NONE);
 }
 
+int xen_dmap_remove(void *page)
+{
+    uintptr_t s = (uintptr_t)page;
+    uintptr_t e = s + PAGE_SIZE;
+    return modify_xen_mappings(s, e, _PAGE_NONE);
+}
+
+int xen_dmap_restore(void* page)
+{
+    mfn_t mfn = virt_to_mfn(page);
+    return map_pages_to_xen((uintptr_t)page, mfn, 1, PAGE_HYPERVISOR_RW);
+}
+
 int xen_dmap_make_ro(void *page)
 {
-    return modify_xen_mappings((uintptr_t)page,
-                               (uintptr_t)page + PAGE_SIZE,
-                               PAGE_HYPERVISOR_RO);
+    uintptr_t s = (uintptr_t)page;
+    uintptr_t e = s + PAGE_SIZE;
+    return modify_xen_mappings(s, e, PAGE_HYPERVISOR_RO);
 }
 
 int xen_dmap_make_rw(void *page)
 {
-    return modify_xen_mappings((uintptr_t)page,
-                               (uintptr_t)page + PAGE_SIZE,
-                               PAGE_HYPERVISOR_RW);
+    uintptr_t s = (uintptr_t)page;
+    uintptr_t e = s + PAGE_SIZE;
+    return modify_xen_mappings(s, e, PAGE_HYPERVISOR_RW);
 }
 
 void __set_fixmap(

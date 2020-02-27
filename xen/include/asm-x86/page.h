@@ -449,6 +449,16 @@ void efi_update_l4_pgtable(unsigned int l4idx, l4_pgentry_t);
 #ifndef __ASSEMBLY__
 
 /**
+ * Remove a page from Xen's direct map.
+ */
+int xen_dmap_remove(void *page);
+
+/**
+ * Restore a previously removed page in Xen's direct map.
+ */
+int xen_dmap_restore(void* page);
+
+/**
  * Make a page read-only in Xen's direct map.
  */
 int xen_dmap_make_ro(void *page);

@@ -63,13 +63,12 @@ uintptr_t provideSVAMemory(size_t size)
      */
     struct page_info *pg = alloc_domheap_page(NULL, 0);
 
-    /*
-     * TODO: remove the page from Xen's direct map. (SVA's MMU checks will
-     * verify this to keep Xen honest.)
-     *
-     * We're not doing this at the moment because we don't yet have SVA's
-     * DMAP working in the Xen port.
-     */
+    if (mm_sva_init) {
+        /*
+         * Remove the page from Xen's direct map.
+         */
+        BUG_ON(xen_dmap_remove(page_to_virt(pg)));
+    }
 
     /* Return the physical address of the page. */
     return page_to_maddr(pg);
@@ -87,13 +86,12 @@ void releaseSVAMemory(uintptr_t addr, size_t size)
               "4 kB page of memory at a time. (Attempted to free %ld B.)\n",
               size);
 
-    /*
-     * TODO: add the page back to Xen's direct map.
-     *
-     * We're not doing this at the moment because we don't yet have SVA's
-     * DMAP working in the Xen port, and thus provideSVAMemory() isn't
-     * removing pages from Xen's DMAP in the first place.
-     */
+    if (mm_sva_init) {
+        /*
+         * Restore the page to Xen's direct map.
+         */
+        BUG_ON(xen_dmap_restore(maddr_to_virt(addr)));
+    }
 
     /* Return the page to Xen's domain heap. */
     free_domheap_page(maddr_to_page(addr));
