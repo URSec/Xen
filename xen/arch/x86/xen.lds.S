@@ -327,6 +327,9 @@ SECTIONS
   .sva.data (NOLOAD) : {
        __start_sva_data = .;
        *(svamem)
+       . = ALIGN(PAGE_SIZE * 8);
+       __sva_percpu_region_base = .;
+       . += PAGE_SIZE * 8;
        __end_sva_data = .;
   } :svamem
 
