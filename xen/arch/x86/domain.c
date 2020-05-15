@@ -157,7 +157,7 @@ static void idle_loop(void)
     }
 }
 
-void startup_cpu_idle_loop(void)
+void noreturn startup_cpu_idle_loop(void)
 {
     struct vcpu *v = current;
 

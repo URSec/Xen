@@ -316,7 +316,7 @@ static void set_cpu_sibling_map(unsigned int cpu)
     }
 }
 
-void start_secondary(void *unused)
+void noreturn start_secondary(void)
 {
     /*
      * Dont put anything before smp_callin(), SMP booting is so fragile that we
