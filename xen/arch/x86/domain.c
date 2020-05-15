@@ -1834,7 +1834,7 @@ void context_switch(struct vcpu *prev, struct vcpu *next)
     set_current(next);
 
     if ( (per_cpu(curr_vcpu, cpu) == next) ||
-         (is_idle_domain(nextd) && cpu_online(cpu)) )
+         (!IS_ENABLED(CONFIG_SVA) && is_idle_domain(nextd) && cpu_online(cpu)) )
     {
         local_irq_enable();
     }
