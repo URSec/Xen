@@ -49,6 +49,7 @@
 #include <smpboot_hooks.h>
 
 #ifdef CONFIG_SVA
+#include <sva/init.h>
 #include <xen-sva/mem.h>
 #endif
 
@@ -361,7 +362,18 @@ void noreturn start_secondary(void)
     /* Safe to enable feature such as CR4.MCE with the IDT set up now. */
     write_cr4(mmu_cr4_features);
 
+#ifdef CONFIG_SVA
+    /*
+     * Don't overlap the stack with the guest registers.
+     */
+    this_cpu(init_tss).rsp0 = (uintptr_t)get_cpu_info();
+
+    sva_init_secondary_xen(&this_cpu(init_tss));
+
+    idle_vcpu[cpu]->arch.sva_thread_handle = sva_get_current();
+#else
     percpu_traps_init();
+#endif
 
     cpu_init();
 
@@ -420,6 +432,13 @@ void noreturn start_secondary(void)
 
 extern void *stack_start;
 
+#ifdef CONFIG_SVA
+static int wakeup_secondary_cpu(int phys_apicid, unsigned long start_eip)
+{
+    void *stack = (char*)stack_start + STACK_SIZE - sizeof(struct cpu_info);
+    return !sva_launch_ap(phys_apicid, start_eip, &start_secondary, stack);
+}
+#else
 static int wakeup_secondary_cpu(int phys_apicid, unsigned long start_eip)
 {
     unsigned long send_status = 0, accept_status = 0;
@@ -528,6 +547,7 @@ static int wakeup_secondary_cpu(int phys_apicid, unsigned long start_eip)
 
     return (send_status | accept_status);
 }
+#endif
 
 int alloc_cpu_id(void)
 {
@@ -554,6 +574,14 @@ static int do_boot_cpu(int apicid, int cpu)
 
     /* start_eip had better be page-aligned! */
     start_eip = setup_trampoline();
+
+#ifdef CONFIG_SVA
+    /*
+     * Some of the CFI stuff causes this to not be page-aligned, but we only
+     * care about the address of the whole page anyways.
+     */
+    start_eip &= -(1UL << 12);
+#endif
 
     /* So we see what's up   */
     if ( opt_cpu_info )
