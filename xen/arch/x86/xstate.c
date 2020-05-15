@@ -643,6 +643,16 @@ void xstate_init(struct cpuinfo_x86 *c)
 
     if ( setup_xstate_features(bsp) && bsp )
         BUG();
+
+#ifdef CONFIG_SVA
+    /*
+     * SVA doesn't like when we set bits in xcr0 that it doesn't know about.
+     */
+    const unsigned long SVA_XSAVE_FEATURES =
+        X86_XCR0_FP | X86_XCR0_SSE | X86_XCR0_YMM | X86_XCR0_BNDREGS |
+        X86_XCR0_BNDCSR | X86_XCR0_OPMASK | X86_XCR0_ZMM | X86_XCR0_HI_ZMM;
+    BUG_ON(!set_xcr0(feature_mask & SVA_XSAVE_FEATURES));
+#endif
 }
 
 static bool valid_xcr0(u64 xcr0)
