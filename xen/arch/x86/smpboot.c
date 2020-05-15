@@ -48,6 +48,10 @@
 #include <mach_wakecpu.h>
 #include <smpboot_hooks.h>
 
+#ifdef CONFIG_SVA
+#include <xen-sva/mem.h>
+#endif
+
 #define setup_trampoline()    (bootsym_phys(trampoline_realmode_entry))
 
 unsigned long __read_mostly trampoline_phys;
@@ -632,6 +636,15 @@ unsigned long alloc_stub_page(unsigned int cpu, unsigned long *mfn)
     unsigned long stub_va;
     struct page_info *pg;
 
+#ifdef CONFIG_SVA
+    extern bool mm_sva_init;
+    unsigned int stub_flags =
+        (mm_sva_init ? PAGE_HYPERVISOR_RO : PAGE_HYPERVISOR_RX) |
+        MAP_SMALL_PAGES;
+#else
+    unsigned int stub_flags = PAGE_HYPERVISOR_RX | MAP_SMALL_PAGES;
+#endif
+
     BUILD_BUG_ON(STUBS_PER_PAGE & (STUBS_PER_PAGE - 1));
 
     if ( *mfn )
@@ -649,8 +662,7 @@ unsigned long alloc_stub_page(unsigned int cpu, unsigned long *mfn)
     }
 
     stub_va = XEN_VIRT_END - (cpu + 1) * PAGE_SIZE;
-    if ( map_pages_to_xen(stub_va, page_to_mfn(pg), 1,
-                          PAGE_HYPERVISOR_RX | MAP_SMALL_PAGES) )
+    if ( map_pages_to_xen(stub_va, page_to_mfn(pg), 1, stub_flags) )
     {
         if ( !*mfn )
             free_domheap_page(pg);
@@ -658,6 +670,16 @@ unsigned long alloc_stub_page(unsigned int cpu, unsigned long *mfn)
     }
     else if ( !*mfn )
         *mfn = mfn_x(page_to_mfn(pg));
+
+#ifdef CONFIG_SVA
+    /*
+     * SVA doesn't allow us to create code pages. Instead, we map the page as
+     * read-only, then use a non-standard intrinsic to turn it into a code page.
+     */
+    if (mm_sva_init) {
+        sva_debug_make_code_page((void*)stub_va);
+    }
+#endif
 
     return stub_va;
 }
