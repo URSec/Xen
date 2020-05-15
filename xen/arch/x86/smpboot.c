@@ -633,10 +633,12 @@ static int do_boot_cpu(int apicid, int cpu)
         {
             boot_error = 1;
             smp_mb();
+#ifndef CONFIG_SVA
             if ( bootsym(trampoline_cpu_started) == 0xA5 )
                 /* trampoline started but...? */
                 printk("Stuck ??\n");
             else
+#endif
                 /* trampoline code not run */
                 printk("Not responding.\n");
         }
@@ -648,8 +650,10 @@ static int do_boot_cpu(int apicid, int cpu)
         rc = -EIO;
     }
 
+#ifndef CONFIG_SVA
     /* mark "stuck" area as not stuck */
     bootsym(trampoline_cpu_started) = 0;
+#endif
     smp_mb();
 
     smpboot_restore_warm_reset_vector();
