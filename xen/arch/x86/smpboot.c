@@ -988,15 +988,35 @@ static void cpu_smpboot_free(unsigned int cpu, bool remove)
         unsigned char *stub_page = map_domain_page(mfn);
         unsigned int i;
 
+#ifdef CONFIG_SVA
+        sva_unprotect_code_page(stub_page);
+#endif
+
         memset(stub_page + STUB_BUF_CPU_OFFS(cpu), 0xcc, STUB_BUF_SIZE);
+
+#ifdef CONFIG_SVA
+        sva_protect_code_page(stub_page);
+#endif
+
         for ( i = 0; i < STUBS_PER_PAGE; ++i )
             if ( stub_page[i * STUB_BUF_SIZE] != 0xcc )
                 break;
         unmap_domain_page(stub_page);
+
+#ifndef CONFIG_SVA
+        /*
+         * SVA does not currently allow us to free code pages, so we just leave
+         * the stub page around if running with SVA. This is only done when
+         * offlining a CPU, so worst case senario is a rare single-page memory
+         * leak during CPU offlining. We use our debug "let me write to this
+         * code page" intrinsic to allow overwriting of the stubs with trap
+         * instructions just in case.
+         */
         destroy_xen_mappings(per_cpu(stubs.addr, cpu) & PAGE_MASK,
                              (per_cpu(stubs.addr, cpu) | ~PAGE_MASK) + 1);
         if ( i == STUBS_PER_PAGE )
             free_domheap_page(mfn_to_page(mfn));
+#endif
     }
 
     order = get_order_from_pages(NR_RESERVED_GDT_PAGES);
