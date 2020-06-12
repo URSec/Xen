@@ -642,7 +642,7 @@ static void __init noreturn reinit_bsp_stack(void)
     /* Update SYSCALL trampolines */
     percpu_traps_init();
 #else
-    this_cpu(init_tss).rsp0 = (uintptr_t)get_cpu_info();
+    this_cpu(init_tss).rsp0 = (uintptr_t)get_cpu_info() & ~0xfUL;
 #endif
 
     stack_base[0] = stack;
@@ -1679,7 +1679,7 @@ void __init noreturn __start_xen(unsigned long mbi_p)
      * with the guest registers.
      */
     struct tss_struct *tss = &this_cpu(init_tss);
-    tss->rsp0 = (uintptr_t)get_cpu_info();
+    tss->rsp0 = (uintptr_t)get_cpu_info() & ~0xfUL;
 
     sva_init_primary_xen(tss);
 

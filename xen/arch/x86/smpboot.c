@@ -366,7 +366,7 @@ void noreturn start_secondary(void)
     /*
      * Don't overlap the stack with the guest registers.
      */
-    this_cpu(init_tss).rsp0 = (uintptr_t)get_cpu_info();
+    this_cpu(init_tss).rsp0 = (uintptr_t)get_cpu_info() & ~0xfUL;
 
     sva_init_secondary_xen(&this_cpu(init_tss));
 
@@ -435,7 +435,8 @@ extern void *stack_start;
 #ifdef CONFIG_SVA
 static int wakeup_secondary_cpu(int phys_apicid, unsigned long start_eip)
 {
-    void *stack = (char*)stack_start + STACK_SIZE - sizeof(struct cpu_info);
+    void *stack =
+        (char*)stack_start + ((STACK_SIZE - sizeof(struct cpu_info)) & ~0xfUL);
     return !sva_launch_ap(phys_apicid, start_eip, &start_secondary, stack);
 }
 #else

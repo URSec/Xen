@@ -33,6 +33,7 @@ ENTRY(__high_start)
 
         /* Pass off the Multiboot info structure to C land (if applicable). */
         mov     multiboot_ptr(%rip),%edi
+        andq    $~0xf, %rsp /* Align the stack */
         call    __start_xen
         BUG     /* __start_xen() shouldn't return. */
 
