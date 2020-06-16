@@ -54,7 +54,8 @@ CFLAGS += -fomit-frame-pointer
 endif
 
 CFLAGS += -nostdinc -fno-builtin -fno-common
-CFLAGS += -Werror -Wredundant-decls -Wno-pointer-arith -Wno-address-of-packed-member
+CFLAGS += -Werror -Wredundant-decls -Wno-pointer-arith
+CFLAGS += -Wno-address-of-packed-member -Wno-tautological-constant-compare
 $(call cc-option-add,CFLAGS,CC,-Wvla)
 CFLAGS += -pipe -D__XEN__ -include $(BASEDIR)/include/xen/config.h
 CFLAGS-$(CONFIG_DEBUG_INFO) += -g
