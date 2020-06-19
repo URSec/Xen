@@ -53,6 +53,12 @@ else
 CFLAGS += -fomit-frame-pointer
 endif
 
+# This needs to be in `$(CFLAGS)` instead of `$(CFLAGS-y)` because of how the
+# build system detects PE32 support.
+ifeq ($(CONFIG_SVA),y)
+CFLAGS += -sva -fsva-check-loads
+endif
+
 CFLAGS += -nostdinc -fno-builtin -fno-common
 CFLAGS += -Werror -Wredundant-decls -Wno-pointer-arith
 CFLAGS += -Wno-address-of-packed-member -Wno-tautological-constant-compare
