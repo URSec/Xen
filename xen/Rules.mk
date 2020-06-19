@@ -59,6 +59,11 @@ ifeq ($(CONFIG_SVA),y)
 CFLAGS += -sva
 endif
 
+# Use the kernel code model.
+CFLAGS += -mcmodel=kernel
+AFLAGS += -mcmodel=kernel
+LDFLAGS += -mcmodel=kernel
+
 CFLAGS += -nostdinc -fno-builtin -fno-common
 CFLAGS += -Werror -Wredundant-decls -Wno-pointer-arith
 CFLAGS += -Wno-address-of-packed-member -Wno-tautological-constant-compare
