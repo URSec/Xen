@@ -56,7 +56,7 @@ endif
 # This needs to be in `$(CFLAGS)` instead of `$(CFLAGS-y)` because of how the
 # build system detects PE32 support.
 ifeq ($(CONFIG_SVA),y)
-CFLAGS += -sva -fsva-check-loads
+CFLAGS += -sva
 endif
 
 CFLAGS += -nostdinc -fno-builtin -fno-common
