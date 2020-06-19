@@ -321,6 +321,7 @@ SECTIONS
   efi = .;
 #endif
 
+#ifdef CONFIG_SVA
   /* Secure memory section */
   ASSERT(. < SECMEMSTART, "Not enough room for secure memory region")
   . = SECMEMSTART;
@@ -332,6 +333,7 @@ SECTIONS
        . += PAGE_SIZE * 8;
        __end_sva_data = .;
   } :svamem
+#endif
 
   /* Sections to be discarded */
   /DISCARD/ : {
