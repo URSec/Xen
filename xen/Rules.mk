@@ -64,6 +64,10 @@ CFLAGS += -mcmodel=kernel
 AFLAGS += -mcmodel=kernel
 LDFLAGS += -mcmodel=kernel
 
+# Needed for determining alternatives at compile time.
+# TODO: Make a config option for "static" vs. "dynamic" alternatives.
+CFLAGS += -march=native
+
 CFLAGS += -nostdinc -fno-builtin -fno-common
 CFLAGS += -Werror -Wredundant-decls -Wno-pointer-arith
 CFLAGS += -Wno-address-of-packed-member -Wno-tautological-constant-compare
