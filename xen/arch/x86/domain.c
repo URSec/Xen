@@ -412,6 +412,12 @@ int arch_vcpu_create(struct vcpu *v)
 
 void arch_vcpu_destroy(struct vcpu *v)
 {
+#ifdef CONFIG_SVA
+    if (v->arch.sva_thread_handle != 0) {
+        sva_release_stack(v->arch.sva_thread_handle);
+    }
+#endif
+
     xfree(v->arch.vm_event);
     v->arch.vm_event = NULL;
 
