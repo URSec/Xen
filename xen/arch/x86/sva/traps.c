@@ -47,7 +47,14 @@ static void _ret_from_intr_sva(struct cpu_user_regs *regs);
 
 void copy_regs_from_sva(struct cpu_user_regs *regs)
 {
-    sva_cpu_user_regs(regs, NULL, NULL);
+    if (sva_was_privileged()) {
+        sva_cpu_user_regs(regs, NULL, NULL);
+    } else {
+        struct cpu_info *cpu_info = get_cpu_info();
+        sva_cpu_user_regs(regs,
+                          &cpu_info->guest_fs_base,
+                          &cpu_info->guest_gs_base);
+    }
 }
 
 void copy_regs_to_sva(struct cpu_user_regs *regs)
