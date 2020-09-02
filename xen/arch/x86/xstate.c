@@ -14,6 +14,8 @@
 #include <asm/xstate.h>
 #include <asm/asm_defns.h>
 
+#include <sva/vmx_intrinsics.h>
+
 /*
  * Maximum size (in byte) of the XSAVE/XRSTOR save area required by all
  * the supported and enabled features on the processor, including the
@@ -167,14 +169,71 @@ static void setup_xstate_comp(uint16_t *comp_offsets,
  */
 void expand_xsave_states(struct vcpu *v, void *dest, unsigned int size)
 {
+#ifndef CONFIG_SVA
     const struct xsave_struct *xsave = v->arch.xsave_area;
+#else /* SVA config */
+    /*
+     * SVA: read XSAVE data for this vCPU from SVA using a Shade intrinsic
+     * instead of referencing Xen's xsave_area struct (which is not used in
+     * the SVA config).
+     */
+
+    /*
+     * Since the actual size of an XSAVE data block is CPU-dependent, SVA
+     * represents it using the union type "xsave_area_max", which is defined
+     * to include a 4 kB char array to ensure that it has enough space for
+     * any CPU in the foreseeable future. As of 2020, our newest test
+     * hardware requires only 2696 B.
+     *
+     * FIXME: this means this could break in 5-10 years on newer hardware if
+     * Intel keeps jamming new FP vector state into the ISA! If this happens,
+     * an assert will fire below to inform the user (rather bluntly) that
+     * these chickens have come home to roost.
+     *
+     * This is a hack, since we should really be computing the size based on
+     * CPUID feature reporting and allocating these dynamically. That's what
+     * Xen does in the non-SVA config; but this is fine for at least the near
+     * future, and simplifies SVA's internal usage of these structures since
+     * the alternative would be to use the dynamic secure memory allocator.
+     *
+     * Since Xen calculates the size dynamically, the "size" parameter to
+     * this function should always be smaller than SVA's static size, so it's
+     * safe for us to reinterpret-cast the SVA type to the Xen type for Xen's
+     * use in the remainder of this function. (The types are identical in
+     * layout; they only differ in how they allocate the
+     * statically-indeterminate space at the end for the processor-specific
+     * portions of the XSAVE block. If this isn't true we're in trouble
+     * (hence the assert).
+     */
+    union xsave_area_max xsave_data;
+    ASSERT(sizeof(xsave_data) >= size);
+
+    int sva_vmid = sva_get_vmid_from_vmcs(v->arch.hvm.vmx.vmcs_pa);
+    sva_getvmfpu(sva_vmid, &xsave_data);
+
+    const struct xsave_struct *xsave = (const struct xsave_struct*)&xsave_data;
+#endif
+
     const void *src;
     uint16_t comp_offsets[sizeof(xfeature_mask)*8];
     u64 xstate_bv = xsave->xsave_hdr.xstate_bv;
     u64 valid;
 
+    /*
+     * SVA: xcr0_accum doesn't contain meaningful data now that SVA has taken
+     * over operation of XCR0, so skip this assertion. This shouldn't break
+     * anything since Xen should only be calling this function when there is,
+     * in fact, state to serialize, which is what the assert is indirectly
+     * checking. (Otherwise, vanilla Xen would be crashing here!)
+     *
+     * FIXME: revisit this once you've fully sorted out how Shade is going to
+     * handle XCR0 and XSAVE (i.e. whether and to what extent we continue to
+     * incorporate xcr0_accum or anything like it.)
+     */
+#ifndef CONFIG_SVA
     /* Check there is state to serialise (i.e. at least an XSAVE_HDR) */
     BUG_ON(!v->arch.xcr0_accum);
+#endif
     /* Check there is the correct room to decompress into. */
     BUG_ON(size != xstate_ctxt_size(v->arch.xcr0_accum));
 
@@ -484,6 +543,22 @@ void xrstor(struct vcpu *v, uint64_t mask)
 
 bool xsave_enabled(const struct vcpu *v)
 {
+#ifdef CONFIG_SVA
+    /*
+     * In the SVA config, Xen's XSAVE area for a vCPU is not allocated, so
+     * v->arch.xsave_area will be a null pointer. This would cause an
+     * assertion failure below if cpu_has_xsave is true, since Xen expects
+     * this to be non-null if XSAVE is available.
+     *
+     * To keep this simple, we'll just unconditionally return true in the SVA
+     * case, since our current SVA-OS implementation unconditionally assumes
+     * XSAVE is supported and uses it (i.e., our current prototype does not
+     * support pre-XSAVE CPUs, and we don't really see a need to ever add
+     * support for them considering they're not the future).
+     */
+    return true;
+#endif
+
     if ( !cpu_has_xsave )
         return false;
 

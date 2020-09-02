@@ -90,6 +90,19 @@ typedef enum {
 
 #define PI_xAPIC_NDST_MASK      0xFF00
 
+#ifdef CONFIG_SVA
+/*
+ * C function for VM entry/exit that calls SVA intrinsics instead of Xen's
+ * native VMX assembly.
+ *
+ * Defined in arch/x86/sva/vmentry.c.
+ *
+ * Used in lieu of vmx_asm_do_vmentry() (an assembly function defined in
+ * arch/x86/hvm/vmx/entry.S) in the SVA config.
+ */
+void vmx_do_vmentry_sva(void);
+#endif
+
 void vmx_asm_vmexit_handler(struct cpu_user_regs);
 void vmx_asm_do_vmentry(void);
 void vmx_intr_assist(void);

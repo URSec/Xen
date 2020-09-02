@@ -14,6 +14,10 @@
 #include <xen/types.h>
 #include <xen/percpu.h>
 
+#ifdef CONFIG_SVA
+#include <xen/sched.h> /* For struct vcpu, used in vcpu_init_fpu() */
+#endif
+
 /* Byte offset of the stored word size within the FXSAVE area/portion. */
 #define FPU_WORD_SIZE_OFFSET 511
 
@@ -50,6 +54,19 @@ static inline void save_fpu_enable(void)
 
 static inline int vcpu_init_fpu(struct vcpu *__maybe_unused v)
 {
+    /*
+     * SVA doesn't require most of the functionality that vcpu_init_fpu() is
+     * responsible for, but it's responsible for initializing the vCPU's XCR0
+     * and xcr0_accum values, so we need to do that here to make sure they're
+     * not left as uninitialized junk.
+     *
+     * FIXME: this may not matter if/when we switch to having XCR0 "live"
+     * fully on the SVA side instead of being copied to/from Xen on VM entry
+     * and exit.
+     */
+    v->arch.xcr0 = 0;
+    v->arch.xcr0_accum = 0;
+
     return 0;
 }
 

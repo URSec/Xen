@@ -402,6 +402,22 @@ static mfn_t hap_make_monitor_table(struct vcpu *v)
     m4mfn = page_to_mfn(pg);
     l4e = map_domain_page(m4mfn);
 
+    /*
+     * Declare the newly allocated L4 PTP to SVA (in the CONFIG_SVA case).
+     *
+     * Note that, despite this being a HAP (EPT)-related function, the page
+     * table here is in fact a host (non-EPT) PTP, since as the function name
+     * implies, it is for the "monitor" (i.e. Xen itself running in VMX root
+     * mode).
+     *
+     * Note also: l4e is a virtual address in Xen's direct map, since in
+     * CONFIG_SVA, map_domain_page() is simply a DMAP lookup.
+     * declare_l4_table() will convert it to a physical address for passing
+     * to SVA's declare-PTP intrinsic. (In !CONFIG_SVA, declare_l4_table() is
+     * a no-op so it doesn't matter what we pass to it.)
+     */
+    declare_l4_table(l4e);
+
     init_xen_l4_slots(l4e, m4mfn, d, INVALID_MFN, false);
     unmap_domain_page(l4e);
 
@@ -416,6 +432,14 @@ static mfn_t hap_make_monitor_table(struct vcpu *v)
 static void hap_destroy_monitor_table(struct vcpu* v, mfn_t mmfn)
 {
     struct domain *d = v->domain;
+
+    /*
+     * Undeclare to SVA the monitor root (L4) PTP being destroyed.
+     *
+     * (Note that we must convert mmfn to a virtual address in Xen's direct
+     * map to pass it to undeclare_page_table().)
+     */
+    undeclare_page_table(mfn_to_virt(mfn_x(mmfn)));
 
     /* Put the memory back in the pool */
     hap_free(d, mmfn);

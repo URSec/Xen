@@ -489,10 +489,20 @@ static void vmx_vcpu_destroy(struct vcpu *v)
  */
 static void vmx_restore_host_msrs(void)
 {
+    /*
+     * SVA: the syscall MSRs are initialized by SVA on boot to different
+     * values than Xen would set them to here, so we mustn't let Xen clobber
+     * them.
+     *
+     * SVA ensures that they are saved/restored appropriately when
+     * entering/exiting VMX non-root mode via the sva_runvm() intrinsic.
+     */
+#ifndef CONFIG_SVA
     /* Relies on the SYSCALL trampoline being at the start of the stubs. */
     wrmsrl(MSR_STAR,         XEN_MSR_STAR);
     wrmsrl(MSR_LSTAR,        this_cpu(stubs.addr));
     wrmsrl(MSR_SYSCALL_MASK, XEN_SYSCALL_MASK);
+#endif
 }
 
 static void vmx_save_guest_msrs(struct vcpu *v)
@@ -507,9 +517,27 @@ static void vmx_save_guest_msrs(struct vcpu *v)
 static void vmx_restore_guest_msrs(struct vcpu *v)
 {
     wrgsshadow(v->arch.hvm.vmx.shadow_gs);
+
+    /*
+     * SVA: saving and restoring of these MSRs on VMX entry/exit is taken
+     * care of by the sva_runvm() intrinsic. If we let Xen set them here then
+     * Bad Things would happen because any syscalls between now and VM entry
+     * would be taken by whatever handlers Xen has installed here instead of
+     * being intercepted by SVA.
+     *
+     * (Xen presumably ensures no syscalls take place between installing a
+     * guest's handlers - whose addresses would be meaningless in a host
+     * context - and VM entry in its non-SVA config. That's sufficient to
+     * ensure logical correctness, but it'd still be a security hole, since
+     * the guest's handler addresses are under Xen's control and a
+     * compromised Xen could potentially issue syscalls in host context after
+     * installing them, allowing it to bypass CFI.)
+     */
+#ifndef CONFIG_SVA
     wrmsrl(MSR_STAR,           v->arch.hvm.vmx.star);
     wrmsrl(MSR_LSTAR,          v->arch.hvm.vmx.lstar);
     wrmsrl(MSR_SYSCALL_MASK,   v->arch.hvm.vmx.sfmask);
+#endif
 
     if ( cpu_has_msr_tsc_aux )
         wrmsr_tsc_aux(v->arch.msrs->tsc_aux);
@@ -864,15 +892,20 @@ static int vmx_load_msr(struct vcpu *v, struct hvm_msr *ctxt)
 
 static void vmx_fpu_enter(struct vcpu *v)
 {
+    /* SVA: not required since SVA is handling FPU context switching. */
+#ifndef CONFIG_SVA
     vcpu_restore_fpu_lazy(v);
     v->arch.hvm.vmx.exception_bitmap &= ~(1u << TRAP_no_device);
     vmx_update_exception_bitmap(v);
     v->arch.hvm.vmx.host_cr0 &= ~X86_CR0_TS;
     __vmwrite(HOST_CR0, v->arch.hvm.vmx.host_cr0);
+#endif
 }
 
 static void vmx_fpu_leave(struct vcpu *v)
 {
+    /* SVA: not required since SVA is handling FPU context switching. */
+#ifndef CONFIG_SVA
     ASSERT(!v->fpu_dirtied);
     ASSERT(read_cr0() & X86_CR0_TS);
 
@@ -895,6 +928,7 @@ static void vmx_fpu_leave(struct vcpu *v)
         v->arch.hvm.vmx.exception_bitmap |= (1u << TRAP_no_device);
         vmx_update_exception_bitmap(v);
     }
+#endif
 }
 
 static void vmx_ctxt_switch_from(struct vcpu *v)

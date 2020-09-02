@@ -722,6 +722,8 @@ int _vmx_cpu_up(bool bsp)
                "(sva_initvmx() returned false). Disabling VMX.\n", cpu);
         return -EINVAL;
     }
+
+    this_cpu(vmxon) = 1;
 #else /* non-SVA case (!#ifdef CONFIG_SVA) */
     switch ( __vmxon(this_cpu(vmxon_region)) )
     {
@@ -877,6 +879,11 @@ void vmx_vmcs_exit(struct vcpu *v)
 
 static void vmx_set_host_env(struct vcpu *v)
 {
+  /*
+   * SVA: these host state fields are saved in the VMCS by sva_runvm() prior
+   * to each VM entry.
+   */
+#ifndef CONFIG_SVA
     unsigned int cpu = smp_processor_id();
 
     __vmwrite(HOST_GDTR_BASE,
@@ -894,6 +901,7 @@ static void vmx_set_host_env(struct vcpu *v)
      */
     __vmwrite(HOST_RSP,
               (unsigned long)&get_cpu_info()->guest_cpu_user_regs.error_code);
+#endif
 }
 
 void vmx_clear_msr_intercept(struct vcpu *v, unsigned int msr,
@@ -1923,7 +1931,15 @@ void vmx_do_resume(struct vcpu *v)
     if ( host_cr4 != read_cr4() )
         __vmwrite(HOST_CR4, read_cr4());
 
+#ifdef CONFIG_SVA
+    /*
+     * Use C code that calls SVA intrinsics for VM entry instead of Xen's
+     * native VMX assembly.
+     */
+    reset_stack_and_jump(vmx_do_vmentry_sva);
+#else /* non-SVA case (!#ifdef CONFIG_SVA) */
     reset_stack_and_jump(vmx_asm_do_vmentry);
+#endif
 }
 
 static inline unsigned long vmr(unsigned long field)

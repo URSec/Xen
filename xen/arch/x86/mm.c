@@ -5876,9 +5876,29 @@ int create_perdomain_mapping(struct domain *d, unsigned long va,
                 clear_domain_page(page_to_mfn(pg));
                 if ( !IS_NIL(ppg) )
                     *ppg++ = pg;
+
                 l1e_write(&l1tab[l1_table_offset(va)],
                     l1e_from_page(pg, __PAGE_HYPERVISOR_RW | _PAGE_AVAIL0));
+
+#if 0
                 l2e_add_flags(*pl2e, _PAGE_AVAIL0);
+#endif
+                /*
+                 * SVA: don't use l2e_add_flags() to operate directly on the
+                 * PTE since that expands to an in-place |= that will crash
+                 * because SVA makes the PTEs read-only. Instead, read the
+                 * PTE to a local variable, apply the flags to it, and then
+                 * write it back to the page table using l2e_write(), which
+                 * conditionally uses the SVA intrinsic when CONFIG_SVA is
+                 * defined.
+                 *
+                 * (This is also correct in the non-SVA case and should
+                 * expand to essentially the same assembly, so we do not need
+                 * to condition it here.)
+                 */
+                l2_pgentry_t new_l2e = *pl2e;
+                l2e_add_flags(new_l2e, _PAGE_AVAIL0);
+                l2e_write(pl2e, new_l2e);
             }
             else
                 rc = -ENOMEM;

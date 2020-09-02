@@ -396,8 +396,52 @@ int arch_vcpu_create(struct vcpu *v)
     }
 
 #ifdef CONFIG_SVA
-    // Actual guest registers will be filled in `arch_set_info_guest`
-    v->arch.sva_thread_handle = 0;
+    if ( is_hvm_domain(d) )
+    {
+        /*
+         * For HVM vCPUs, we will never actually be switching to ring 3 in
+         * root (VMX host) mode, since the guest lives entirely in non-root
+         * (VMX guest) mode; Xen lives alone in root mode and always stays in
+         * ring 0. Thus, there is no meaningful context to be specified by an
+         * HVM vCPU's SVA's thread handle, since it will never actually be
+         * used.
+         *
+         * However, because Xen calls sva_swap_user_integer(0 when context
+         * switching - whether the incoming domain is PV or HVM -
+         * v->arch.sva_thread_handle must point to *some* valid SVA icontext
+         * structure, otherwise SVA will cry foul. (If we don't initialize it
+         * here, it will be a null pointer, which certainly won't do.)
+         *
+         * We can't simply decline to call sva_swap_user_integer() when
+         * context-switching to an HVM vCPU, because then the PV vCPU we're
+         * switching *away* from wouldn't get its context saved in the right
+         * place if and when Xen decides to switch to a *different* PV vCPU.
+         * (And of course we'd have even bigger problems on a system trying
+         * to create a new PV vCPU with *no* prior PV vCPUs in existence,
+         * although for now that's moot because we haven't yet ported Xen's
+         * PVH-dom0 code paths to SVA, meaning we always have at least a PV
+         * dom0.)
+         *
+         * So, we need to create a "dummy" SVA icontext for this vCPU. It
+         * doesn't matter what we pass as arguments to sva_create_icontext()
+         * (i.e. as the icontext's starting RIP, RDI, RSI, RDX, and RSP),
+         * since Xen will never actually switch to ring 3 in root mode, i.e.
+         * this context will never be loaded onto the processor.
+         *
+         * Note that this dummy icontext will eventually be freed by
+         * arch_vcpu_destroy() (below) when Xen shuts down the vCPU. That
+         * occurs on a code path common to PV and HVM.
+         */
+        v->arch.sva_thread_handle = sva_create_icontext(0, 0, 0, 0, 0);
+    }
+    else
+    {
+        /*
+         * For PV vCPUs, actual guest registers will be filled in
+         * `arch_set_info_guest`.
+         */
+        v->arch.sva_thread_handle = 0;
+    }
 #endif
 
     return rc;
@@ -1769,8 +1813,34 @@ static void __context_switch(void)
     /*
      * SVA's copy of the guest registers should be the same as our own, so we
      * do this as a sanity check.
+     *
+     * NOTE: we must only do this for PV vCPUs, because SVA's guest register
+     * context is a dummy (filled with meaningless values) for HVM vCPUs.
+     * This is because an SVA icontext represents *root-mode* (i.e. VMX host
+     * mode, translating from Intel-speak) ring-3 context; and for HVM
+     * guests, Xen has no meaningful host-ring-3 context, since that ring
+     * goes unused. The guest lives entirely in non-root (VMX guest) mode,
+     * which is switched to through a process quite different from the normal
+     * interrupt-return process by which we switch to host-ring-3. More
+     * saliently, that process involves a *different SVA intrinsic*
+     * (sva_runvm() instead of sva_iret()), and SVA loads the guest's context
+     * from a different place (a VM descriptor instead of an icontext).
+     *
+     * FIXME: when we've ported the VM entry/exit process further so that SVA
+     * takes proper ownership of the guest's context (i.e. SVA's own VM
+     * descriptor holds the "canonical copy" instead of values being copied
+     * back and forth from Xen's stack directly before/after VM entry/exit),
+     * it *might* be worthwhile to copy SVA's canonical values into Xen's
+     * locations here, for the exact same reason we do it in the PV case (as
+     * a sanity check to make sure Xen's copy hasn't gotten out of sync with
+     * SVA's canonical copy). Depending on how we choose to do the port,
+     * however, that may or may not be necessary. (It'll depend on the extent
+     * to which we port the *users* of Xen's register structure within Xen to
+     * use the SVA intrinsics directly vs. working with that singular copy
+     * owned by Xen.)
      */
-    copy_regs_from_sva(stack_regs);
+    if ( is_pv_vcpu(n) )
+      copy_regs_from_sva(stack_regs);
 
     if (!swap_succeeded) {
         if (sva_get_current() == n->arch.sva_thread_handle) {
