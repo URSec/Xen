@@ -913,7 +913,144 @@ void guest_cpuid(const struct vcpu *v, uint32_t leaf,
                  * enabled XSTATE, and appropraite XCR0|XSS are in context.
                  */
         case 0:
+#ifdef CONFIG_SVA
+                /*
+                 * SVA: XCR0 context switching for HVM guests is now handled
+                 * by SVA within the sva_runvm() intrinsic, instead of during
+                 * Xen's own context switching process. This means that an
+                 * HVM guest's XCR0 is *not* in context (contrary to the
+                 * comment above from vanilla Xen) when running in host (VMX
+                 * root) mode. Rather, SVA/Xen's XCR0 (which is fixed at
+                 * boot and cannot be changed by Xen) is always in effect
+                 * when in host mode.
+                 *
+                 * For PV guests, we can retain vanilla Xen's behavior of
+                 * simply querying CPUID on the physical processor, based on
+                 * the currently active XCR0, and passing through its result
+                 * to the guest. Our limited support for PV guests (which is
+                 * mainly dom0-focused) simply forces them to use SVA/Xen's
+                 * unchanging XCR0 value, which seems to be "good enough" for
+                 * Linux PV guests (at least on our test machines for our
+                 * current hardcoded SVA/Xen XCR0 setting).
+                 *
+                 * NOTE: we don't need to worry about XSS because, as the
+                 * unmodified Xen code and comment above illustrate, Xen
+                 * doesn't support XSS to begin with. We therefore only need
+                 * to look at XCR0.
+                 */
+                if ( is_hvm_domain(d) )
+                {
+                    /*
+                     * Read guest XCR0 where Xen's saved it and compute the
+                     * requisite size of an XSAVE area based on the enabled
+                     * bits. Then set that value to be returned to the guest
+                     * as the EBX value (res->b) resulting from this CPUID
+                     * emulation.
+                     *
+                     * This imitates the logic of the real hardware for this
+                     * CPUID subleaf, which returns the "size (in bytes)
+                     * required by the XSAVE instruction for an XSAVE area
+                     * containing all the user state components corresponding
+                     * to bits currently set in XCR0" in EBX. (For subleaf 1,
+                     * we instead report the size required by XSAVES based on
+                     * the bits currently set in XCR0|XSS - which, as noted
+                     * above, is just XCR0 in our case.)
+                     *
+                     * We determine the size of the individual enabled state
+                     * components by querying the physical processor's CPUID
+                     * leaf 0xD, subleaf n (n>1), where n is the feature's bit
+                     * position in XCR0. (n=0 and n=1 correspond to x87 and
+                     * SSE state and are part of the legacy region of the
+                     * XSAVE area, which is always the same size (512 B) and
+                     * can be hardcoded, so CPUID uses those subleaves for
+                     * different functions...namely, the ones we're emulating
+                     * here.)
+                     *
+                     * Since *those* subleaves are static for a particular
+                     * processor, we can look their values up in Xen's
+                     * precomputed-on-boot CPUID policy database (p) rather
+                     * than querying the hardware for them, which would be
+                     * (in principle) slow, and marginally clunkier
+                     * code-wise.
+                     */
+                    uint64_t guest_xcr0 = v->arch.xcr0;
+
+                    /*
+                     * The minimum size for an XSAVE area is 576 bytes,
+                     * comprising the 512 B legacy region (x87 and SSE data)
+                     * plus the 64 B XSAVE header after it.
+                     *
+                     * If I'm reading the Intel manual correctly, a minimal
+                     * XSAVE, with only x87 and SSE enabled in XCR0 should
+                     * *only* require those 576 B.  Our XSAVE-consistency
+                     * unit test seems to confirm this (no byte beyond the
+                     * 576th is written by XSAVES when only x87 and SSE are
+                     * enabled).
+                     */
+                    uint32_t req_xsave_size = 576;
+                    for (int i = 2; i < 64; i++)
+                    {
+                        if ( guest_xcr0 & (1 << i) ) /* feature i is enabled */
+                        {
+                            if (subleaf == 0)
+                            {
+                                /*
+                                 * Subleaf 0 reports the size required by an
+                                 * XSAVE area using the *uncompressed*
+                                 * format, as per the "classic" XSAVE
+                                 * instruction. In the uncompressed format,
+                                 * each feature is saved at an
+                                 * architecturally defined offset, even if
+                                 * that means leaving empty space earlier in
+                                 * the structure that corresponds to features
+                                 * that aren't enabled or supported by this
+                                 * CPU.
+                                 *
+                                 * Thus, we increase req_xsave_size to be at
+                                 * least as large as includes the last byte
+                                 * position within this feature's
+                                 * architecturally assigned area in the XSAVE
+                                 * extended region.
+                                 */
+                                uint32_t feature_end_byte =
+                                    p->xstate.comp[i].offset
+                                    + p->xstate.comp[i].size;
+
+                                if (feature_end_byte > req_xsave_size)
+                                    req_xsave_size = feature_end_byte;
+                            } else { /* subleaf 1 */
+                                /*
+                                 * Subleaf 0 reports the size required by an
+                                 * XSAVE area using the newer *compressed*
+                                 * format, as used by the XSAVEC and XSAVES
+                                 * instructions. The compressed format saves
+                                 * space by writing each active feature's
+                                 * state immediately following the previous
+                                 * active feature's, omitting inactive
+                                 * (disabled or unsupported) features in
+                                 * between. It writes a bitmap to the
+                                 * XCOMP_BV field in the XSAVE region's
+                                 * header indicating which features were
+                                 * included, allowing the compressed
+                                 * structure to be correctly decoded.
+                                 *
+                                 * Thus, we can determine the maximum
+                                 * required size of a compressed XSAVE area
+                                 * by simply adding the size of each enabled
+                                 * feature to req_xsave_size.
+                                 */
+                                req_xsave_size += p->xstate.comp[i].size;
+                            }
+                        }
+                    }
+
+                    res->b = req_xsave_size;
+                }
+                else /* vanilla Xen behavior for PV guests */
+                    res->b = cpuid_count_ebx(leaf, subleaf);
+#else /* non-SVA config */
                 res->b = cpuid_count_ebx(leaf, subleaf);
+#endif /* non-SVA config */
             }
             break;
         }
