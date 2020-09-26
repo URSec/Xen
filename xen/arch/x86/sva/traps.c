@@ -280,11 +280,12 @@ static void make_bounce_frame_64(struct cpu_user_regs *regs, struct vcpu *curr,
     bool failed;
     if (access_ok(guest_rsp, bf_size)) {
         if (switch_mode) {
-            failed = !sva_ialloca_newstack(guest_rsp, FLAT_KERNEL_SS,
-                                           bounce_frame, bf_size, 4);
-        } else {
-            failed = !sva_ialloca(bounce_frame, bf_size, 4);
+            /*
+             * Only failure condition is when segment is privileged.
+             */
+            BUG_ON(!sva_ialloca_switch_stack(guest_rsp, FLAT_KERNEL_SS));
         }
+        failed = !sva_ialloca(bounce_frame, bf_size, 4);
     } else {
         failed = true;
     }
