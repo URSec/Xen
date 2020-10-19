@@ -59,6 +59,8 @@
 #include <asm/monitor.h>
 #include <public/arch-x86/cpuid.h>
 
+#include <sva/vmx_intrinsics.h>
+
 static bool_t __initdata opt_force_ept;
 boolean_param("force-ept", opt_force_ept);
 
@@ -511,12 +513,50 @@ static void vmx_save_guest_msrs(struct vcpu *v)
      * We cannot cache SHADOW_GS_BASE while the VCPU runs, as it can
      * be updated at any time via SWAPGS, which we cannot trap.
      */
+#ifndef CONFIG_SVA
     v->arch.hvm.vmx.shadow_gs = rdgsshadow();
+#else /* SVA config */
+    /*
+     * SVA: the sva_runvm() intrinsic takes care of saving and restoring a
+     * VMX guest's GS Shadow register around VM entry and exit. While the
+     * guest is not running, SVA stores its saved GS Shadow value in SVA
+     * internal memory. We use the sva_getvmreg() intrinsic here to access
+     * that saved value.
+     */
+
+    /* NOTE: sva_get_vmid_from_vmcs() is a temporary hack that allows us to
+     * look up a vCPU's SVA numeric identifier using the physical address of
+     * its VMCS. Later in the port, SVA will fully own the VMCS and Xen won't
+     * know its address; instead Xen will keep track of this numeric
+     * identifier in a field within current->arch.hvm.vmx. */
+    int sva_vmid = sva_get_vmid_from_vmcs(v->arch.hvm.vmx.vmcs_pa);
+
+    v->arch.hvm.vmx.shadow_gs = sva_getvmreg(sva_vmid, VM_REG_GS_SHADOW);
+#endif
 }
 
 static void vmx_restore_guest_msrs(struct vcpu *v)
 {
+#ifndef CONFIG_SVA
     wrgsshadow(v->arch.hvm.vmx.shadow_gs);
+#else /* SVA config */
+    /*
+     * SVA: the sva_runvm() intrinsic takes care of saving and restoring a
+     * VMX guest's GS Shadow register around VM entry and exit. While the
+     * guest is not running, SVA stores its saved GS Shadow value in SVA
+     * internal memory. We use the sva_setvmreg() intrinsic here to modify
+     * that saved value.
+     */
+
+    /* NOTE: sva_get_vmid_from_vmcs() is a temporary hack that allows us to
+     * look up a vCPU's SVA numeric identifier using the physical address of
+     * its VMCS. Later in the port, SVA will fully own the VMCS and Xen won't
+     * know its address; instead Xen will keep track of this numeric
+     * identifier in a field within current->arch.hvm.vmx. */
+    int sva_vmid = sva_get_vmid_from_vmcs(v->arch.hvm.vmx.vmcs_pa);
+
+    sva_setvmreg(sva_vmid, VM_REG_GS_SHADOW, v->arch.hvm.vmx.shadow_gs);
+#endif
 
     /*
      * SVA: saving and restoring of these MSRs on VMX entry/exit is taken
