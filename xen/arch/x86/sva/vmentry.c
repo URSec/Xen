@@ -335,6 +335,7 @@ void vmx_do_vmentry_sva(void)
          */
         uint64_t guest_xcr0 = current_vcpu->arch.xcr0 | XSTATE_FP_SSE;
         sva_setvmreg(sva_vmid, VM_REG_XCR0, guest_xcr0);
+        sva_setvmreg(sva_vmid, VM_REG_MSR_XSS, current_vcpu->arch.hvm.msr_xss);
         sva_setvmreg(sva_vmid, VM_REG_MSR_FMASK, current_vcpu->arch.hvm.vmx.sfmask);
         sva_setvmreg(sva_vmid, VM_REG_MSR_STAR, current_vcpu->arch.hvm.vmx.star);
         sva_setvmreg(sva_vmid, VM_REG_MSR_LSTAR, current_vcpu->arch.hvm.vmx.lstar);
@@ -417,6 +418,7 @@ void vmx_do_vmentry_sva(void)
         guest_regs->r15 = sva_getvmreg(sva_vmid, VM_REG_R15);
         current_vcpu->arch.hvm.guest_cr[2] = sva_getvmreg(sva_vmid, VM_REG_CR2);
         current_vcpu->arch.xcr0 = sva_getvmreg(sva_vmid, VM_REG_XCR0);
+        current_vcpu->arch.hvm.msr_xss = sva_getvmreg(sva_vmid, VM_REG_MSR_XSS);
         current_vcpu->arch.hvm.vmx.sfmask = sva_getvmreg(sva_vmid, VM_REG_MSR_FMASK);
         current_vcpu->arch.hvm.vmx.star = sva_getvmreg(sva_vmid, VM_REG_MSR_STAR);
         current_vcpu->arch.hvm.vmx.lstar = sva_getvmreg(sva_vmid, VM_REG_MSR_LSTAR);
