@@ -339,11 +339,12 @@ void vmx_do_vmentry_sva(void)
         sva_setvmreg(sva_vmid, VM_REG_MSR_FMASK, current_vcpu->arch.hvm.vmx.sfmask);
         sva_setvmreg(sva_vmid, VM_REG_MSR_STAR, current_vcpu->arch.hvm.vmx.star);
         sva_setvmreg(sva_vmid, VM_REG_MSR_LSTAR, current_vcpu->arch.hvm.vmx.lstar);
-        /* Note: it doesn't look like Xen cares about CSTAR, as it doesn't
-         * read or write it in its respective vmx_save/restore_guest_msrs()
-         * functions. Probably Xen just doesn't support SYSCALL in 32-bit
-         * mode, which is reasonable considering that 32-bit code typically
-         * uses INT 0x80 instead. */
+        /* Note: we don't need to copy CSTAR since it's only relevant on AMD
+         * hardware (Intel never supported SYSCALL in 32-bit mode). Xen
+         * handles VM exits for attempted reads and writes to it by the guest
+         * but it never actually installs it on the physical hardware; it
+         * only tracks the written value in struct vcpu so that it can
+         * emulate reads consistent with writes. */
 
         /*
          * Ask SVA to load this vCPU onto the processor.

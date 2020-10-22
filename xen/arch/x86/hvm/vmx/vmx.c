@@ -3203,14 +3203,23 @@ static int vmx_msr_write_intercept(unsigned int msr, uint64_t msr_content)
 
     case MSR_STAR:
         v->arch.hvm.vmx.star = msr_content;
+        /*
+         * SVA: STAR, LSTAR, and CSTAR are context-switched by sva_runvm() on
+         * VM entry and exit. Xen synchronizes its own copy of the guests'
+         * values for these MSRs with SVA's in vmx_do_vmentry_sva().
+         */
+#ifndef CONFIG_SVA
         wrmsrl(MSR_STAR, msr_content);
+#endif
         break;
 
     case MSR_LSTAR:
         if ( !is_canonical_address(msr_content) )
             goto gp_fault;
         v->arch.hvm.vmx.lstar = msr_content;
+#ifndef CONFIG_SVA /* See comment on MSR_STAR above */
         wrmsrl(MSR_LSTAR, msr_content);
+#endif
         break;
 
     case MSR_CSTAR:
