@@ -3230,7 +3230,9 @@ static int vmx_msr_write_intercept(unsigned int msr, uint64_t msr_content)
 
     case MSR_SYSCALL_MASK:
         v->arch.hvm.vmx.sfmask = msr_content;
+#ifndef CONFIG_SVA /* See comment on MSR_STAR above */
         wrmsrl(MSR_SYSCALL_MASK, msr_content);
+#endif
         break;
 
     case MSR_IA32_DEBUGCTLMSR:
