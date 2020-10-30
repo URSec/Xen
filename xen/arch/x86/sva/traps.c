@@ -161,11 +161,11 @@ void sva_syscall(void)
         if (is_iret) {
             copy_regs_to_sva(regs);
         } else {
-            BUG_ON(!sva_icontext_setretval(regs->rax));
-            BUG_ON(!sva_icontext_setsyscallargs((uint64_t[6]){
+            BUG_ON(sva_icontext_setretval(regs->rax));
+            BUG_ON(sva_icontext_setsyscallargs((uint64_t[6]){
                 regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8, regs->r9 }));
             if (curr->hcall_preempted) {
-                BUG_ON(!sva_icontext_restart());
+                BUG_ON(sva_icontext_restart());
             }
             copy_regs_from_sva(regs);
         }
