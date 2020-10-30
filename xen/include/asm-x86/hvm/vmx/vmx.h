@@ -28,6 +28,8 @@
 #include <asm/hvm/trace.h>
 #include <asm/hvm/vmx/vmcs.h>
 
+#include <sva/vmx_intrinsics.h>
+
 typedef union {
     struct {
         u64 r       :   1,  /* bit 0 - Read permission */
@@ -103,8 +105,16 @@ typedef enum {
 void vmx_do_vmentry_sva(void);
 #endif
 
+/* TODO: these two declarations should be disabled in CONFIG_SVA, since they
+ * have been replaced by vmx_do_vmentry_sva() (declared above). Haven't
+ * disabled them yet because (for now) there's still vestigial code in
+ * construct_vmcs() which installs the exit handler to the HOST_RIP field. It
+ * gets overwritten by SVA's handler in sva_runvm(), but ultimately we'll
+ * need to disable that line in Xen since SVA will refuse that write once we
+ * enable VMCS checks. */
 void vmx_asm_vmexit_handler(struct cpu_user_regs);
 void vmx_asm_do_vmentry(void);
+
 void vmx_intr_assist(void);
 void noreturn vmx_do_resume(struct vcpu *);
 void vmx_vlapic_msr_changed(struct vcpu *v);
@@ -337,6 +347,43 @@ extern uint8_t posted_intr_vector;
 # define GAS_VMX_OP(yes, no) no
 #endif
 
+#ifdef CONFIG_SVA
+
+static always_inline void __vmptrld(u64 addr)
+{
+    /* Get the SVA VM ID corresponding to this VMCS address.
+     *
+     * FIXME: this is a temporary hack for incremental porting. Eventually,
+     * we want Xen to not have the VMCS paddr pointer at all and instead
+     * track the SVA VM ID directly. sva_get_vmid_from_vmcs() is a
+     * brute-force solution (it does a linear search through SVA's VM
+     * descriptor array until it finds one whose VMCS address matches that
+     * provided) but it works "well enough" at this stage. */
+    int sva_vmid = sva_get_vmid_from_vmcs(addr);
+
+    sva_loadvm(sva_vmid);
+}
+
+static always_inline void __vmpclear(u64 addr)
+{
+    /* FIXME: SVA doesn't take a parameter specifying *which* VMID to unload,
+     * since there should always be exactly one VMCS loaded on the processor
+     * when it's called. This may be at odds with how Xen expects to use this
+     * function, since Intel also specifies the use of VMCLEAR for
+     * initializing a new VMCS that isn't loaded. We don't need to use it
+     * that way under Shade, since sva_allocvm() both allocates and
+     * initializes the VMCS in a single step; but we will probably need to
+     * adjust a few places in Xen that expect it to be otherwise. In the
+     * meantime, it would probably be a good idea to create some sort of
+     * temporary SVA intrinsic here that allows Xen to assert-check that the
+     * loaded VMCS matches the parameter passed here, and possibly a way to
+     * request SVA to issue VMCLEAR on a non-loaded VMCS. */
+
+    sva_unloadvm();
+}
+
+#else /* non-SVA config */
+
 static always_inline void __vmptrld(u64 addr)
 {
     asm volatile (
@@ -380,6 +427,8 @@ static always_inline void __vmpclear(u64 addr)
                      _ASM_BUGFRAME_INFO(BUGFRAME_bug, __LINE__, __FILE__, 0)
                    : "memory");
 }
+
+#endif /* end non-SVA config */
 
 static always_inline void __vmread(unsigned long field, unsigned long *value)
 {

@@ -346,26 +346,6 @@ void vmx_do_vmentry_sva(void)
          * only tracks the written value in struct vcpu so that it can
          * emulate reads consistent with writes. */
 
-        /*
-         * Ask SVA to load this vCPU onto the processor.
-         *
-         * FIXME: this is a hack; currently Xen is doing the
-         * loading/unloading, not SVA (the loading/unloading code in
-         * sva_load/unloadvm() is disabled when #ifdef XEN). The reason we
-         * are calling these intrinsics is because SVA needs to *think* this
-         * vCPU is loaded in order to save and load its register state from
-         * the right VM descriptor. Ultimately, we should not be
-         * loading/unloading here in this function, but wherever Xen would
-         * normally call its native VMCS load/unload assembly.
-         *
-         * Note that because SVA's not actually doing the load/unload, we
-         * still need to call sva_launchvm() vs. sva_resumevm() respectively
-         * below according to Xen's knowledge of the actual VMCS launch
-         * state. SVA's check to ensure that we are using the "correct"
-         * intrinsic for (its idea of) the situation is currently disabled
-         * when #ifdef XEN.
-         */
-        sva_loadvm(sva_vmid);
 
         /*
          * Finally, perform VMX VM entry to run the vCPU natively on the
@@ -390,13 +370,6 @@ void vmx_do_vmentry_sva(void)
         else
             vmrun_retval = sva_resumevm();
 
-        /*
-         * Ask SVA to unload this vCPU from the processor.
-         *
-         * FIXME: this is a total hack; see comment above where it's loaded
-         * right before VM entry.
-         */
-        sva_unloadvm();
 
         /*
          * Copy the guest's non-VMCS-resident register state that was saved
