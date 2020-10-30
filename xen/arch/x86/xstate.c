@@ -543,27 +543,18 @@ void xrstor(struct vcpu *v, uint64_t mask)
 
 bool xsave_enabled(const struct vcpu *v)
 {
-#ifdef CONFIG_SVA
-    /*
-     * In the SVA config, Xen's XSAVE area for a vCPU is not allocated, so
-     * v->arch.xsave_area will be a null pointer. This would cause an
-     * assertion failure below if cpu_has_xsave is true, since Xen expects
-     * this to be non-null if XSAVE is available.
-     *
-     * To keep this simple, we'll just unconditionally return true in the SVA
-     * case, since our current SVA-OS implementation unconditionally assumes
-     * XSAVE is supported and uses it (i.e., our current prototype does not
-     * support pre-XSAVE CPUs, and we don't really see a need to ever add
-     * support for them considering they're not the future).
-     */
-    return true;
-#endif
-
     if ( !cpu_has_xsave )
         return false;
 
     ASSERT(xsave_cntxt_size >= XSTATE_AREA_MIN_SIZE);
+
+    /*
+     * SVA: xsave_area is not used since SVA handles FPU context switching,
+     * and thus will be null at all times under CONFIG_SVA.
+     */
+#ifndef CONFIG_SVA
     ASSERT(v->arch.xsave_area);
+#endif
 
     return !!v->arch.xcr0_accum;
 }
