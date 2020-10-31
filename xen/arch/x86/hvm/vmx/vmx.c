@@ -3088,22 +3088,47 @@ static void vmx_free_vlapic_mapping(struct domain *d)
         free_shared_domheap_page(mfn_to_page(_mfn(mfn)));
 }
 
+#ifdef CONFIG_SVA
+
+static void vmx_install_vlapic_mapping_sva(struct vcpu* v)
+{
+    ASSERT(cpu_has_vmx_apic_reg_virt);
+    ASSERT(cpu_has_vmx_virtualize_apic_accesses);
+    ASSERT(cpu_has_vmx_virtualize_x2apic_mode);
+    ASSERT(cpu_has_vmx_virtual_intr_delivery);
+
+    paddr_t virt_page_ma = page_to_maddr(vcpu_vlapic(v)->regs_page);
+    paddr_t apic_page_ma =
+        pfn_to_paddr(v->domain->arch.hvm.vmx.apic_access_mfn);
+
+    if (vlapic_hw_disabled(vcpu_vlapic(v))) {
+        BUG_ON(sva_vlapic_disable());
+    } else if (vlapic_x2apic_mode(vcpu_vlapic(v))) {
+        BUG_ON(sva_vlapic_enable_x2apic(virt_page_ma));
+    } else {
+        BUG_ON(sva_vlapic_enable(virt_page_ma, apic_page_ma));
+    }
+}
+
+#endif
+
 static void vmx_install_vlapic_mapping(struct vcpu *v)
 {
-    paddr_t virt_page_ma, apic_page_ma;
-
     if ( v->domain->arch.hvm.vmx.apic_access_mfn == 0 )
         return;
 
     ASSERT(cpu_has_vmx_virtualize_apic_accesses);
 
-    virt_page_ma = page_to_maddr(vcpu_vlapic(v)->regs_page);
-    apic_page_ma = v->domain->arch.hvm.vmx.apic_access_mfn;
-    apic_page_ma <<= PAGE_SHIFT;
-
     vmx_vmcs_enter(v);
+#ifdef CONFIG_SVA
+    vmx_install_vlapic_mapping_sva(v);
+#else
+    paddr_t virt_page_ma = page_to_maddr(vcpu_vlapic(v)->regs_page);
     __vmwrite(VIRTUAL_APIC_PAGE_ADDR, virt_page_ma);
+    paddr_t apic_page_ma =
+        pfn_to_paddr(v->domain->arch.hvm.vmx.apic_access_mfn);
     __vmwrite(APIC_ACCESS_ADDR, apic_page_ma);
+#endif
     vmx_vmcs_exit(v);
 }
 
@@ -3159,7 +3184,11 @@ void vmx_vlapic_msr_changed(struct vcpu *v)
               msr <= MSR_X2APIC_FIRST + 0xff; msr++ )
             vmx_set_msr_intercept(v, msr, VMX_MSR_RW);
 
+#ifdef CONFIG_SVA
+    vmx_install_vlapic_mapping_sva(v);
+#else
     vmx_update_secondary_exec_control(v);
+#endif
     vmx_vmcs_exit(v);
 }
 
