@@ -28,7 +28,9 @@
 #include <asm/hvm/trace.h>
 #include <asm/hvm/vmx/vmcs.h>
 
+#ifdef CONFIG_SVA
 #include <sva/vmx_intrinsics.h>
+#endif
 
 typedef union {
     struct {

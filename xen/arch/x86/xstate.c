@@ -14,7 +14,9 @@
 #include <asm/xstate.h>
 #include <asm/asm_defns.h>
 
+#ifdef CONFIG_SVA
 #include <sva/vmx_intrinsics.h>
+#endif
 
 /*
  * Maximum size (in byte) of the XSAVE/XRSTOR save area required by all

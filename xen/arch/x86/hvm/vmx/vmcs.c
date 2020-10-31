@@ -41,7 +41,10 @@
 #include <asm/spec_ctrl.h>
 #include <asm/tboot.h>
 #include <asm/apic.h>
+
+#ifdef CONFIG_SVA
 #include <sva/vmx_intrinsics.h>
+#endif
 
 static bool_t __read_mostly opt_vpid_enabled = 1;
 boolean_param("vpid", opt_vpid_enabled);

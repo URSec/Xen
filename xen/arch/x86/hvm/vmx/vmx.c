@@ -59,7 +59,9 @@
 #include <asm/monitor.h>
 #include <public/arch-x86/cpuid.h>
 
+#ifdef CONFIG_SVA
 #include <sva/vmx_intrinsics.h>
+#endif
 
 static bool_t __initdata opt_force_ept;
 boolean_param("force-ept", opt_force_ept);
