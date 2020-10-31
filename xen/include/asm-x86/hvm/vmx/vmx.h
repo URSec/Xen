@@ -363,7 +363,7 @@ static always_inline void __vmptrld(u64 addr)
      * provided) but it works "well enough" at this stage. */
     int sva_vmid = sva_get_vmid_from_vmcs(addr);
 
-    sva_loadvm(sva_vmid);
+    BUG_ON(sva_loadvm(sva_vmid));
 }
 
 static always_inline void __vmpclear(u64 addr)
@@ -381,6 +381,10 @@ static always_inline void __vmpclear(u64 addr)
      * loaded VMCS matches the parameter passed here, and possibly a way to
      * request SVA to issue VMCLEAR on a non-loaded VMCS. */
 
+    /*
+     * TODO: This should BUG_ON failure, but we currently allow it to fail
+     * because we sometimes call it without a VM currently loaded.
+     */
     sva_unloadvm();
 }
 
