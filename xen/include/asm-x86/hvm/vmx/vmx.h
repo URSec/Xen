@@ -382,6 +382,77 @@ static always_inline void __vmpclear(u64 addr)
     sva_unloadvm();
 }
 
+/*
+ * Use vmread_safe() if you don't want to bugcheck unconditionally on
+ * failure.
+ */
+static always_inline void __vmread(unsigned long field, unsigned long *value)
+{
+    int sva_retval = sva_readvmcs((enum sva_vmcs_field)field, value);
+
+    BUG_ON(sva_retval != 0);
+}
+
+/*
+ * Use vmwrite_safe() if you don't want to bugcheck unconditionally on
+ * failure.
+ */
+static always_inline void __vmwrite(unsigned long field, unsigned long value)
+{
+    int sva_retval = sva_writevmcs((enum sva_vmcs_field)field, value);
+
+    BUG_ON(sva_retval != 0);
+}
+
+static inline enum vmx_insn_errno vmread_safe(unsigned long field,
+                                              unsigned long *value)
+{
+    int sva_retval = sva_readvmcs((enum sva_vmcs_field)field, value);
+
+    if (sva_retval == 0)
+        return VMX_INSN_SUCCEED;
+    else if (sva_retval == -1)
+        return VMX_INSN_FAIL_INVALID;
+    else if (sva_retval == -2)
+    {
+        /*
+         * A valid VMCS is loaded but the specified field was nonexistent.
+         * Read the VM-instruction error code from the VMCS and return that.
+         */
+        uint64_t vm_inst_err;
+        sva_readvmcs((enum sva_vmcs_field)VM_INSTRUCTION_ERROR, &vm_inst_err);
+        return vm_inst_err;
+    } else {
+        panic("vmread_safe(): sva_readvmcs() returned nonsensical "
+              "error code %d", sva_retval);
+    }
+}
+
+static inline enum vmx_insn_errno vmwrite_safe(unsigned long field,
+                                               unsigned long value)
+{
+    int sva_retval = sva_writevmcs((enum sva_vmcs_field)field, value);
+
+    if (sva_retval == 0)
+        return VMX_INSN_SUCCEED;
+    else if (sva_retval == -1)
+        return VMX_INSN_FAIL_INVALID;
+    else if (sva_retval == -2)
+    {
+        /*
+         * A valid VMCS is loaded but the specified field was nonexistent or
+         * read-only. Read the VM-instruction error code from the VMCS and
+         * return that.
+         */
+        uint64_t vm_inst_err;
+        sva_readvmcs((enum sva_vmcs_field)VM_INSTRUCTION_ERROR, &vm_inst_err);
+        return vm_inst_err;
+    } else {
+        panic("vmwrite_safe(): sva_writevmcs() returned nonsensical "
+              "error code %d", sva_retval);
+    }
+}
+
 #else /* non-SVA config */
 
 static always_inline void __vmptrld(u64 addr)
@@ -427,8 +498,6 @@ static always_inline void __vmpclear(u64 addr)
                      _ASM_BUGFRAME_INFO(BUGFRAME_bug, __LINE__, __FILE__, 0)
                    : "memory");
 }
-
-#endif /* end non-SVA config */
 
 static always_inline void __vmread(unsigned long field, unsigned long *value)
 {
@@ -520,6 +589,12 @@ static inline enum vmx_insn_errno vmwrite_safe(unsigned long field,
 
     return ret;
 }
+
+#endif /* end non-SVA config */
+
+/* TODO (SVA): Go through the rest of these and replace inline assembly with
+ * calls to SVA intrinsics (or just disable them if we've already ported Xen
+ * to not need them - e.g. VMXON/VMXOFF). */
 
 static always_inline void __invept(unsigned long type, uint64_t eptp)
 {
