@@ -1333,8 +1333,10 @@ static int construct_vmcs(struct vcpu *v)
 
     if ( cpu_has_vmx_tpr_shadow )
     {
+#ifndef CONFIG_SVA /* SVA doesn't let us set this directly */
         __vmwrite(VIRTUAL_APIC_PAGE_ADDR,
                   page_to_maddr(vcpu_vlapic(v)->regs_page));
+#endif
         __vmwrite(TPR_THRESHOLD, 0);
     }
 
