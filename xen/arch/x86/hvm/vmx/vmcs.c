@@ -1144,9 +1144,11 @@ static int construct_vmcs(struct vcpu *v)
               | SECONDARY_EXEC_VIRTUAL_INTR_DELIVERY);
         v->arch.hvm.vmx.exec_control &= ~CPU_BASED_TPR_SHADOW;
 
+#ifndef CONFIG_SVA
         /* In turn, disable posted interrupts. */
         __vmwrite(PIN_BASED_VM_EXEC_CONTROL,
                   vmx_pin_based_exec_control & ~PIN_BASED_POSTED_INTERRUPT);
+#endif
     }
 
     vmx_update_cpu_exec_control(v);
@@ -1214,8 +1216,15 @@ static int construct_vmcs(struct vcpu *v)
         if ( iommu_intpost )
             pi_desc_init(v);
 
+#ifndef CONFIG_SVA
+        /*
+         * For SVA, posted interrupt processing is enabled once APICv is
+         * initialized.
+         */
+
         __vmwrite(PI_DESC_ADDR, virt_to_maddr(&v->arch.hvm.vmx.pi_desc));
         __vmwrite(POSTED_INTR_NOTIFICATION_VECTOR, posted_intr_vector);
+#endif
     }
 
     /* Host data selectors. */

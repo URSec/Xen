@@ -3102,11 +3102,19 @@ static void vmx_install_vlapic_mapping_sva(struct vcpu* v)
         pfn_to_paddr(v->domain->arch.hvm.vmx.apic_access_mfn);
 
     if (vlapic_hw_disabled(vcpu_vlapic(v))) {
+        // NB: also disables posted interrupt processing
         BUG_ON(sva_vlapic_disable());
     } else if (vlapic_x2apic_mode(vcpu_vlapic(v))) {
         BUG_ON(sva_vlapic_enable_x2apic(virt_page_ma));
     } else {
         BUG_ON(sva_vlapic_enable(virt_page_ma, apic_page_ma));
+    }
+
+    if (!vlapic_hw_disabled(vcpu_vlapic(v)) &&
+        cpu_has_vmx_posted_intr_processing)
+    {
+        paddr_t pi_desc = virt_to_maddr(&v->arch.hvm.vmx.pi_desc);
+        BUG_ON(sva_posted_interrupts_enable(posted_intr_vector, pi_desc));
     }
 }
 
