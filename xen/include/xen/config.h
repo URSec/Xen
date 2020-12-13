@@ -69,6 +69,9 @@
 #define __user
 #define __force
 #define __bitwise
+#ifdef CONFIG_SVA
+#define __kern
+#endif
 
 #define KB(_kb)     (_AC(_kb, ULL) << 10)
 #define MB(_mb)     (_AC(_mb, ULL) << 20)
