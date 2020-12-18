@@ -28,6 +28,7 @@ extern void vmx_cpu_dead(unsigned int cpu);
 extern int  vmx_cpu_up(void);
 extern int  _vmx_cpu_up(bool bsp);
 extern void vmx_cpu_down(void);
+extern void vmx_vmcs_unload(struct vcpu *v);
 
 struct vmcs_struct {
     u32 vmcs_revision_id;

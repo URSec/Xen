@@ -1003,6 +1003,15 @@ static void vmx_ctxt_switch_from(struct vcpu *v)
 
     if ( v->domain->arch.hvm.pi_ops.flags & PI_CSW_FROM )
         vmx_pi_switch_from(v);
+
+#ifdef CONFIG_SVA
+    /*
+     * Since SVA doesn't allow a VMCS to be loaded before the current one is
+     * cleared, we need to clear it here to avoid confusing
+     * `vmx_vmcs_try_enter` if it gets called in the context of the new vCPU.
+     */
+    vmx_vmcs_unload(v);
+#endif
 }
 
 static void vmx_ctxt_switch_to(struct vcpu *v)
