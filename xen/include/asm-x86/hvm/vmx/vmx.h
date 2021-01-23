@@ -368,24 +368,30 @@ static always_inline void __vmptrld(u64 addr)
 
 static always_inline void __vmpclear(u64 addr)
 {
-    /* FIXME: SVA doesn't take a parameter specifying *which* VMID to unload,
-     * since there should always be exactly one VMCS loaded on the processor
-     * when it's called. This may be at odds with how Xen expects to use this
-     * function, since Intel also specifies the use of VMCLEAR for
-     * initializing a new VMCS that isn't loaded. We don't need to use it
-     * that way under Shade, since sva_allocvm() both allocates and
-     * initializes the VMCS in a single step; but we will probably need to
-     * adjust a few places in Xen that expect it to be otherwise. In the
-     * meantime, it would probably be a good idea to create some sort of
-     * temporary SVA intrinsic here that allows Xen to assert-check that the
-     * loaded VMCS matches the parameter passed here, and possibly a way to
-     * request SVA to issue VMCLEAR on a non-loaded VMCS. */
+    /* Get the SVA VM ID corresponding to this VMCS address.
+     *
+     * FIXME: this is a temporary hack for incremental porting. Eventually,
+     * we want Xen to not have the VMCS paddr pointer at all and instead
+     * track the SVA VM ID directly. sva_get_vmid_from_vmcs() is a
+     * brute-force solution (it does a linear search through SVA's VM
+     * descriptor array until it finds one whose VMCS address matches that
+     * provided) but it works "well enough" at this stage. */
+    int sva_vmid = sva_get_vmid_from_vmcs(addr);
 
     /*
      * TODO: This should BUG_ON failure, but we currently allow it to fail
-     * because we sometimes call it without a VM currently loaded.
+     * because we sometimes call it on a VM that hasn't been previously
+     * loaded.
+     *
+     * (Most likely, that is occurring because Xen is trying to use VMCLEAR
+     * to initialize a new VMCS, that being the way it works in the native
+     * architecture. Shade instead incorporates that as part of the
+     * sva_allocvm() operation, making the explicit VMCLEAR superfluous. It
+     * is therefore safe to silently skip the errant VMCLEAR here - although
+     * we should really fix the upstream call sites to not even call
+     * __vmpclear() under CONFIG_SVA.)
      */
-    sva_unloadvm();
+    sva_unloadvm(sva_vmid);
 }
 
 /*
