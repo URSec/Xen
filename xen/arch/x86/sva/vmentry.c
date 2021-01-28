@@ -345,6 +345,7 @@ void vmx_do_vmentry_sva(void)
          * but it never actually installs it on the physical hardware; it
          * only tracks the written value in struct vcpu so that it can
          * emulate reads consistent with writes. */
+        sva_setvmreg(sva_vmid, VM_REG_GS_SHADOW, current_vcpu->arch.hvm.vmx.shadow_gs);
 
 
         /*
@@ -396,6 +397,7 @@ void vmx_do_vmentry_sva(void)
         current_vcpu->arch.hvm.vmx.sfmask = sva_getvmreg(sva_vmid, VM_REG_MSR_FMASK);
         current_vcpu->arch.hvm.vmx.star = sva_getvmreg(sva_vmid, VM_REG_MSR_STAR);
         current_vcpu->arch.hvm.vmx.lstar = sva_getvmreg(sva_vmid, VM_REG_MSR_LSTAR);
+        current_vcpu->arch.hvm.vmx.shadow_gs = sva_getvmreg(sva_vmid, VM_REG_GS_SHADOW);
 
         /*
          * If sva_runvm() returned due to a nominal VM exit, call Xen's

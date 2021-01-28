@@ -577,12 +577,6 @@ static void vmx_clear_vmcs(struct vcpu *v)
         on_selected_cpus(cpumask_of(cpu), __vmx_clear_vmcs, v, 1);
 }
 
-void vmx_vmcs_unload(struct vcpu *v) {
-    ASSERT(v->arch.hvm.vmx.active_cpu == smp_processor_id());
-
-    __vmx_clear_vmcs(v);
-}
-
 static void vmx_load_vmcs(struct vcpu *v)
 {
     unsigned long flags;
@@ -842,16 +836,6 @@ bool_t vmx_vmcs_try_enter(struct vcpu *v)
 
         vcpu_pause(v);
         spin_lock(&v->arch.hvm.vmx.vmcs_lock);
-
-#ifdef CONFIG_SVA
-        /*
-         * SVA doesn't allow us to load a new VMCS until we have cleared the
-         * current one.
-         */
-        if (is_hvm_vcpu(current)) {
-            vmx_clear_vmcs(current);
-        }
-#endif
 
         vmx_clear_vmcs(v);
         vmx_load_vmcs(v);

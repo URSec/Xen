@@ -515,49 +515,40 @@ static void vmx_save_guest_msrs(struct vcpu *v)
      * We cannot cache SHADOW_GS_BASE while the VCPU runs, as it can
      * be updated at any time via SWAPGS, which we cannot trap.
      */
-#ifndef CONFIG_SVA
-    v->arch.hvm.vmx.shadow_gs = rdgsshadow();
-#else /* SVA config */
+
     /*
      * SVA: the sva_runvm() intrinsic takes care of saving and restoring a
      * VMX guest's GS Shadow register around VM entry and exit. While the
      * guest is not running, SVA stores its saved GS Shadow value in SVA
-     * internal memory. We use the sva_getvmreg() intrinsic here to access
-     * that saved value.
+     * internal memory.
+     *
+     * We therefore use the sva_getvmreg() intrinsic to save the guest's GS
+     * Shadow value from the last VM entry. However, as that intrinsic
+     * requires the VMCS to be loaded (which Xen hasn't done yet at this
+     * point in the context-switching process), we do that in
+     * vmx_do_vmentry_sva() instead of here.
      */
-
-    /* NOTE: sva_get_vmid_from_vmcs() is a temporary hack that allows us to
-     * look up a vCPU's SVA numeric identifier using the physical address of
-     * its VMCS. Later in the port, SVA will fully own the VMCS and Xen won't
-     * know its address; instead Xen will keep track of this numeric
-     * identifier in a field within current->arch.hvm.vmx. */
-    int sva_vmid = sva_get_vmid_from_vmcs(v->arch.hvm.vmx.vmcs_pa);
-
-    v->arch.hvm.vmx.shadow_gs = sva_getvmreg(sva_vmid, VM_REG_GS_SHADOW);
+#ifndef CONFIG_SVA
+    v->arch.hvm.vmx.shadow_gs = rdgsshadow();
 #endif
 }
 
 static void vmx_restore_guest_msrs(struct vcpu *v)
 {
-#ifndef CONFIG_SVA
-    wrgsshadow(v->arch.hvm.vmx.shadow_gs);
-#else /* SVA config */
     /*
      * SVA: the sva_runvm() intrinsic takes care of saving and restoring a
      * VMX guest's GS Shadow register around VM entry and exit. While the
      * guest is not running, SVA stores its saved GS Shadow value in SVA
-     * internal memory. We use the sva_setvmreg() intrinsic here to modify
-     * that saved value.
+     * internal memory.
+     *
+     * We therefore use the sva_setvmreg() intrinsic to update the guest's GS
+     * Shadow value for the next VM entry. However, as that intrinsic
+     * requires the VMCS to be loaded (which Xen hasn't done yet at this
+     * point in the context-switching process), we do that in
+     * vmx_do_vmentry_sva() instead of here.
      */
-
-    /* NOTE: sva_get_vmid_from_vmcs() is a temporary hack that allows us to
-     * look up a vCPU's SVA numeric identifier using the physical address of
-     * its VMCS. Later in the port, SVA will fully own the VMCS and Xen won't
-     * know its address; instead Xen will keep track of this numeric
-     * identifier in a field within current->arch.hvm.vmx. */
-    int sva_vmid = sva_get_vmid_from_vmcs(v->arch.hvm.vmx.vmcs_pa);
-
-    sva_setvmreg(sva_vmid, VM_REG_GS_SHADOW, v->arch.hvm.vmx.shadow_gs);
+#ifndef CONFIG_SVA
+    wrgsshadow(v->arch.hvm.vmx.shadow_gs);
 #endif
 
     /*
@@ -1003,15 +994,6 @@ static void vmx_ctxt_switch_from(struct vcpu *v)
 
     if ( v->domain->arch.hvm.pi_ops.flags & PI_CSW_FROM )
         vmx_pi_switch_from(v);
-
-#ifdef CONFIG_SVA
-    /*
-     * Since SVA doesn't allow a VMCS to be loaded before the current one is
-     * cleared, we need to clear it here to avoid confusing
-     * `vmx_vmcs_try_enter` if it gets called in the context of the new vCPU.
-     */
-    vmx_vmcs_unload(v);
-#endif
 }
 
 static void vmx_ctxt_switch_to(struct vcpu *v)
