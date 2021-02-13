@@ -1481,9 +1481,11 @@ static void vmx_load_pdptrs(struct vcpu *v)
 
 static void vmx_update_host_cr3(struct vcpu *v)
 {
+#ifndef CONFIG_SVA /* SVA has full control of this field. */
     vmx_vmcs_enter(v);
     __vmwrite(HOST_CR3, v->arch.cr3);
     vmx_vmcs_exit(v);
+#endif
 }
 
 void vmx_update_debug_state(struct vcpu *v)

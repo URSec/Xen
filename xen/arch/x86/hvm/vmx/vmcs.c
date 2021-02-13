@@ -1227,6 +1227,7 @@ static int construct_vmcs(struct vcpu *v)
 #endif
     }
 
+#ifndef CONFIG_SVA /* SVA has full control of these fields. */
     /* Host data selectors. */
     __vmwrite(HOST_SS_SELECTOR, __HYPERVISOR_DS);
     __vmwrite(HOST_DS_SELECTOR, __HYPERVISOR_DS);
@@ -1254,6 +1255,7 @@ static int construct_vmcs(struct vcpu *v)
     __vmwrite(HOST_SYSENTER_CS, IS_ENABLED(CONFIG_PV) ? __HYPERVISOR_CS : 0);
     __vmwrite(HOST_SYSENTER_EIP,
               IS_ENABLED(CONFIG_PV) ? (unsigned long)sysenter_entry : 0);
+#endif
 
     /* MSR intercepts. */
     __vmwrite(VM_EXIT_MSR_LOAD_COUNT, 0);
@@ -1889,7 +1891,6 @@ void vmx_vmentry_failure(void)
 void vmx_do_resume(struct vcpu *v)
 {
     bool_t debug_state;
-    unsigned long host_cr4;
 
     if ( v->arch.hvm.vmx.active_cpu == smp_processor_id() )
         vmx_vmcs_reload(v);
@@ -1940,10 +1941,13 @@ void vmx_do_resume(struct vcpu *v)
 
     hvm_do_resume(v);
 
+#ifndef CONFIG_SVA /* SVA has full control of this field. */
     /* Sync host CR4 in case its value has changed. */
+    unsigned long host_cr4;
     __vmread(HOST_CR4, &host_cr4);
     if ( host_cr4 != read_cr4() )
         __vmwrite(HOST_CR4, read_cr4());
+#endif
 
 #ifdef CONFIG_SVA
     /*
