@@ -1350,7 +1350,10 @@ static int construct_vmcs(struct vcpu *v)
         ept->mfn = pagetable_get_pfn(p2m_get_pagetable(p2m));
         __vmwrite(EPT_POINTER, ept->eptp);
 
+#ifndef CONFIG_SVA
         __vmwrite(HOST_PAT, XEN_MSR_PAT);
+#endif
+
         __vmwrite(GUEST_PAT, MSR_IA32_CR_PAT_RESET);
     }
     if ( cpu_has_vmx_mpx )
