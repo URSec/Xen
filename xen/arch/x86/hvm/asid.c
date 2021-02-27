@@ -23,6 +23,8 @@
 #include <xen/percpu.h>
 #include <asm/hvm/asid.h>
 
+#include <sva/vmx_intrinsics.h>
+
 /* Xen command-line option to enable ASIDs */
 static int opt_asid_enabled = 1;
 boolean_param("asid", opt_asid_enabled);
@@ -82,17 +84,84 @@ void hvm_asid_init(int nasids)
 
 void hvm_asid_flush_vcpu_asid(struct hvm_vcpu_asid *asid)
 {
+#ifdef CONFIG_SVA
+    /*
+     * This function should never be called in CONFIG_SVA. Instead, its
+     * upstream caller hvm_asid_flush_vcpu() calls the
+     * sva_flush_vpid_single() intrinsic directly. This is necessary because
+     * we need to know the SVA VM ID in order to pass it to that
+     * intrinsic, and that information lives in struct vcpu, not its
+     * sub-struct hvm_vcpu_asid (which is all we have access to here).
+     *
+     * Except in sva_flush_vpid_single(), Xen only calls this function
+     * directly to support nested VMX, which we do not presently support in
+     * Shade. (Adding such support in the future is likely doable but would
+     * require digging into Xen's nested VMX code more deeply to figure out
+     * how to integrate it with Shade.)
+     */
+    panic("hvm_asid_flush_vcpu_asid(): Unimplemented in CONFIG_SVA since "
+        "only called directly in support of nested VMX, "
+        "which we don't (yet) support.\n");
+#else
     asid->generation = 0;
+#endif
 }
 
 void hvm_asid_flush_vcpu(struct vcpu *v)
 {
+#ifdef CONFIG_SVA
+    /*
+     * SVA: we require the processor to have single-context INVVPID support
+     * in our baseline, so we can just use that instead of Xen's roundabout
+     * generational-increment scheme (which, so far as I can tell, is simply
+     * a way of performantly implementing single-context INVVPID on systems
+     * that may or may not support it directly).
+     *
+     * NOTE: we only perform the flush for the "outer" vCPU and ignore any
+     * nested vCPU. This is because we do not yet support nested VMX in
+     * CONFIG_SVA. Adding such support in the future is likely doable but
+     * would require digging into Xen's nested VMX code more deeply to figure
+     * out how to integrate it with Shade. In particular as this code here is
+     * concerned, we have not yet ported the nested VMX code to use Shade
+     * intrinsics for allocating and managing VMCSes, so the SVA VM ID that
+     * we would need to pass to the sva_flush_vpid_single() intrinsic simply
+     * doesn't exist.
+     */
+
+    /* Get the SVA VM ID corresponding to this VMCS address.
+     *
+     * FIXME: this is a temporary hack for incremental porting. Eventually,
+     * we want Xen to not have the VMCS paddr pointer at all and instead
+     * track the SVA VM ID directly. sva_get_vmid_from_vmcs() is a
+     * brute-force solution (it does a linear search through SVA's VM
+     * descriptor array until it finds one whose VMCS address matches that
+     * provided) but it works "well enough" at this stage. */
+    int sva_vmid = sva_get_vmid_from_vmcs(v->arch.hvm.vmx.vmcs_pa);
+
+    sva_flush_vpid_single(sva_vmid,
+        false /* don't retain global translations */);
+#else
     hvm_asid_flush_vcpu_asid(&v->arch.hvm.n1asid);
     hvm_asid_flush_vcpu_asid(&vcpu_nestedhvm(v).nv_n2asid);
+#endif
 }
 
 void hvm_asid_flush_core(void)
 {
+#ifdef CONFIG_SVA
+    /*
+     * SVA: we require the processor to have single-context INVVPID support
+     * in our baseline, so we can just use that instead of Xen's roundabout
+     * generational-increment scheme (which, so far as I can tell, is simply
+     * a way of performantly implementing single-context INVVPID on systems
+     * that may or may not support it directly).
+     *
+     * This means that we no longer have the ability to do a whole-pCPU ASID
+     * flush by incrementing the generation, but that's fine because we can
+     * achieve the same result with an all-contexts INVVPID.
+     */
+    sva_flush_vpid_all();
+#else
     struct hvm_asid_data *data = &this_cpu(hvm_asid_data);
 
     if ( data->disabled )
@@ -108,10 +177,26 @@ void hvm_asid_flush_core(void)
      */
     printk("HVM: ASID generation overrun. Disabling ASIDs.\n");
     data->disabled = 1;
+#endif
 }
 
 bool_t hvm_asid_handle_vmenter(struct hvm_vcpu_asid *asid)
 {
+#ifdef CONFIG_SVA
+    /*
+     * SVA: we require the processor to have single-context INVVPID support
+     * in our baseline, so we can just use that instead of Xen's roundabout
+     * generational-increment scheme (which, so far as I can tell, is simply
+     * a way of performantly implementing single-context INVVPID on systems
+     * that may or may not support it directly).
+     *
+     * This function only exists to support that scheme, and its upstream
+     * call sites should be disabled in CONFIG_SVA. If we missed one this
+     * panic should catch it.
+     */
+    panic("hvm_asid_handle_vmenter(): shouldn't be called in CONFIG_SVA\n");
+#endif
+
     struct hvm_asid_data *data = &this_cpu(hvm_asid_data);
 
     /* On erratum #170 systems we must flush the TLB. 

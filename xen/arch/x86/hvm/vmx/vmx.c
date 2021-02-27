@@ -4389,9 +4389,6 @@ bool vmx_vmenter_helper(const struct cpu_user_regs *regs)
 {
     struct vcpu *curr = current;
     struct domain *currd = curr->domain;
-    u32 new_asid, old_asid;
-    struct hvm_vcpu_asid *p_asid;
-    bool_t need_flush;
 
     /* Shadow EPTP can't be updated here because irqs are disabled */
      if ( nestedhvm_vcpu_in_guestmode(curr) && vcpu_nestedhvm(curr).stale_np2m )
@@ -4402,14 +4399,28 @@ bool vmx_vmenter_helper(const struct cpu_user_regs *regs)
 
     if ( !cpu_has_vmx_vpid )
         goto out;
+
+    /*
+     * SVA: we require the processor to have single-context INVVPID support
+     * in our baseline, so we can just use that instead of Xen's roundabout
+     * generational-increment scheme (which, so far as I can tell, is simply
+     * a way of performantly implementing single-context INVVPID on systems
+     * that may or may not support it directly).
+     *
+     * This code section only exists to support that scheme, so we can
+     * disable it under CONFIG_SVA. Shade takes care of the VMCS VPID field
+     * itself so Xen no longer needs to mess with it at all.
+     */
+#ifndef CONFIG_SVA
+    struct hvm_vcpu_asid *p_asid;
     if ( nestedhvm_vcpu_in_guestmode(curr) )
         p_asid = &vcpu_nestedhvm(curr).nv_n2asid;
     else
         p_asid = &curr->arch.hvm.n1asid;
 
-    old_asid = p_asid->asid;
-    need_flush = hvm_asid_handle_vmenter(p_asid);
-    new_asid = p_asid->asid;
+    u32 old_asid = p_asid->asid;
+    bool_t need_flush = hvm_asid_handle_vmenter(p_asid);
+    u32 new_asid = p_asid->asid;
 
     if ( unlikely(new_asid != old_asid) )
     {
@@ -4432,6 +4443,7 @@ bool vmx_vmenter_helper(const struct cpu_user_regs *regs)
 
     if ( unlikely(need_flush) )
         vpid_sync_all();
+#endif
 
     if ( paging_mode_hap(curr->domain) )
     {

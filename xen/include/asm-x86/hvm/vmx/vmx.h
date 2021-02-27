@@ -465,6 +465,48 @@ static inline enum vmx_insn_errno vmwrite_safe(unsigned long field,
     }
 }
 
+static always_inline void __invept(unsigned long type, uint64_t eptp)
+{
+    switch (type)
+    {
+      case INVEPT_SINGLE_CONTEXT:
+        sva_flush_ept_single(eptp);
+        break;
+      case INVEPT_ALL_CONTEXT:
+        sva_flush_ept_all();
+        break;
+      default:
+        panic("__invept(): unrecognized INVEPT type specified!\n");
+        break;
+    }
+}
+
+/*
+ * N.B.: We do not need to implement __invvpid() in CONFIG_SVA since we
+ * instead directly reimplement its only callers (vpid_sync_vcpu_gva() and
+ * vpid_sync_all(), below).
+ */
+
+static inline void vpid_sync_vcpu_gva(struct vcpu *v, unsigned long gva)
+{
+    /* Get the SVA VM ID corresponding to this VMCS address.
+     *
+     * FIXME: this is a temporary hack for incremental porting. Eventually,
+     * we want Xen to not have the VMCS paddr pointer at all and instead
+     * track the SVA VM ID directly. sva_get_vmid_from_vmcs() is a
+     * brute-force solution (it does a linear search through SVA's VM
+     * descriptor array until it finds one whose VMCS address matches that
+     * provided) but it works "well enough" at this stage. */
+    int sva_vmid = sva_get_vmid_from_vmcs(v->arch.hvm.vmx.vmcs_pa);
+
+    sva_flush_vpid_addr(sva_vmid, gva);
+}
+
+static inline void vpid_sync_all(void)
+{
+    sva_flush_vpid_all();
+}
+
 #else /* non-SVA config */
 
 static always_inline void __vmptrld(u64 addr)
@@ -602,12 +644,6 @@ static inline enum vmx_insn_errno vmwrite_safe(unsigned long field,
     return ret;
 }
 
-#endif /* end non-SVA config */
-
-/* TODO (SVA): Go through the rest of these and replace inline assembly with
- * calls to SVA intrinsics (or just disable them if we've already ported Xen
- * to not need them - e.g. VMXON/VMXOFF). */
-
 static always_inline void __invept(unsigned long type, uint64_t eptp)
 {
     struct {
@@ -673,13 +709,6 @@ static always_inline void __invvpid(unsigned long type, u16 vpid, u64 gva)
                    : "memory" );
 }
 
-static inline void ept_sync_all(void)
-{
-    __invept(INVEPT_ALL_CONTEXT, 0);
-}
-
-void ept_sync_domain(struct p2m_domain *p2m);
-
 static inline void vpid_sync_vcpu_gva(struct vcpu *v, unsigned long gva)
 {
     int type = INVVPID_INDIVIDUAL_ADDR;
@@ -734,6 +763,15 @@ static inline int __vmxon(u64 addr)
 
     return rc;
 }
+
+#endif /* end non-SVA config */
+
+static inline void ept_sync_all(void)
+{
+    __invept(INVEPT_ALL_CONTEXT, 0);
+}
+
+void ept_sync_domain(struct p2m_domain *p2m);
 
 int vmx_guest_x86_mode(struct vcpu *v);
 unsigned int vmx_get_cpl(void);
