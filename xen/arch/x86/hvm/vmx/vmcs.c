@@ -1232,12 +1232,12 @@ static int construct_vmcs(struct vcpu *v)
     __vmwrite(HOST_SYSENTER_CS, IS_ENABLED(CONFIG_PV) ? __HYPERVISOR_CS : 0);
     __vmwrite(HOST_SYSENTER_EIP,
               IS_ENABLED(CONFIG_PV) ? (unsigned long)sysenter_entry : 0);
-#endif
 
     /* MSR intercepts. */
     __vmwrite(VM_EXIT_MSR_LOAD_COUNT, 0);
     __vmwrite(VM_EXIT_MSR_STORE_COUNT, 0);
     __vmwrite(VM_ENTRY_MSR_LOAD_COUNT, 0);
+#endif
 
     __vmwrite(VM_ENTRY_INTR_INFO, 0);
 
@@ -1367,6 +1367,7 @@ static int construct_vmcs(struct vcpu *v)
     return rc;
 }
 
+#ifndef CONFIG_SVA
 /*
  * Search an MSR list looking for an MSR entry, or the slot in which it should
  * live (to keep the data sorted) if an entry is not found.
@@ -1432,10 +1433,19 @@ struct vmx_msr_entry *vmx_find_msr(const struct vcpu *v, uint32_t msr,
 
     return ((ent < end) && (ent->index == msr)) ? ent : NULL;
 }
+#endif
 
 int vmx_add_msr(struct vcpu *v, uint32_t msr, uint64_t val,
                 enum vmx_msr_list_type type)
 {
+#ifdef CONFIG_SVA
+    /* SVA doesn't allow us to use this hardware interface. */
+    gprintk(XENLOG_ERR,
+            "Attempt to use MSR save/load list under SVA (MSR: %x)\n", msr);
+    domain_crash(v->domain);
+    return -EOPNOTSUPP;
+#else
+
     struct vmx_vcpu *vmx = &v->arch.hvm.vmx;
     struct vmx_msr_entry **ptr, *start = NULL, *ent, *end;
     unsigned int substart, subend, total;
@@ -1543,10 +1553,20 @@ int vmx_add_msr(struct vcpu *v, uint32_t msr, uint64_t val,
     vmx_vmcs_exit(v);
 
     return rc;
+
+#endif
 }
 
 int vmx_del_msr(struct vcpu *v, uint32_t msr, enum vmx_msr_list_type type)
 {
+#ifdef CONFIG_SVA
+    /* SVA doesn't allow us to use this hardware interface. */
+    gprintk(XENLOG_ERR,
+            "Attempt to use MSR save/load list under SVA (MSR: %x)\n", msr);
+    domain_crash(v->domain);
+    return -EOPNOTSUPP;
+#else
+
     struct vmx_vcpu *vmx = &v->arch.hvm.vmx;
     struct vmx_msr_entry *start = NULL, *ent, *end;
     unsigned int substart = 0, subend = vmx->msr_save_count;
@@ -1607,6 +1627,8 @@ int vmx_del_msr(struct vcpu *v, uint32_t msr, enum vmx_msr_list_type type)
     vmx_vmcs_exit(v);
 
     return 0;
+
+#endif
 }
 
 void vmx_set_eoi_exit_bitmap(struct vcpu *v, u8 vector)
@@ -1908,8 +1930,10 @@ void vmx_destroy_vmcs(struct vcpu *v)
     vmx_free_vmcs(vmx->vmcs_pa);
 #endif
 
+#ifndef CONFIG_SVA
     free_xenheap_page(v->arch.hvm.vmx.host_msr_area);
     free_xenheap_page(v->arch.hvm.vmx.msr_area);
+#endif
     free_xenheap_page(v->arch.hvm.vmx.msr_bitmap);
 }
 

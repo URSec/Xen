@@ -143,6 +143,7 @@ struct vmx_vcpu {
 
     struct vmx_msr_bitmap *msr_bitmap;
 
+#ifndef CONFIG_SVA
     /*
      * Most accesses to the MSR host/guest load/save lists are in current
      * context.  However, the data can be modified by toolstack/migration
@@ -154,6 +155,7 @@ struct vmx_vcpu {
     unsigned int         msr_load_count;
     unsigned int         msr_save_count;
     unsigned int         host_msr_count;
+#endif
 
     unsigned long        eoi_exitmap_changed;
     DECLARE_BITMAP(eoi_exit_bitmap, NR_VECTORS);
@@ -592,8 +594,18 @@ static inline int vmx_add_host_load_msr(struct vcpu *v, uint32_t msr,
     return vmx_add_msr(v, msr, val, VMX_MSR_HOST);
 }
 
+#ifdef CONFIG_SVA
+static inline struct vmx_msr_entry *
+vmx_find_msr(const struct vcpu *_v, uint32_t _msr,
+             enum vmx_msr_list_type _type)
+{
+    (void)_v, (void)_msr, (void)_type;
+    return NULL;
+}
+#else
 struct vmx_msr_entry *vmx_find_msr(const struct vcpu *v, uint32_t msr,
                                    enum vmx_msr_list_type type);
+#endif
 
 static inline int vmx_read_guest_msr(const struct vcpu *v, uint32_t msr,
                                      uint64_t *val)

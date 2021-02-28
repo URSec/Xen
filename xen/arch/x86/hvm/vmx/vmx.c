@@ -3520,10 +3520,18 @@ static void vmx_failed_vmentry(unsigned int exit_reason,
             printk("  Entry out of range\n");
         else
         {
+#ifdef CONFIG_SVA
+            /*
+             * This feature isn't used (by Xen) under SVA. At any rate, SVA
+             * should ensure that this error doesn't happen.
+             */
+            printk("  Unknown\n");
+#else
             msr = &curr->arch.hvm.vmx.msr_area[idx];
 
             printk("  msr %08x val %016"PRIx64" (mbz %#x)\n",
                    msr->index, msr->data, msr->mbz);
+#endif
         }
         break;
     }
@@ -4330,6 +4338,16 @@ out:
     }
 }
 
+#ifdef CONFIG_SVA
+
+static int lbr_fixup(void) {
+    gprintk(XENLOG_ERR, "LBR fixup unsupported under SVA\n");
+    domain_crash(current->domain);
+    return -EOPNOTSUPP;
+}
+
+#else
+
 static void lbr_tsx_fixup(void)
 {
     struct vcpu *curr = current;
@@ -4376,7 +4394,7 @@ static void bdw_erratum_bdf14_fixup(void)
     sign_extend_msr(curr, MSR_IA32_LASTINTTOIP, VMX_MSR_GUEST);
 }
 
-static void lbr_fixup(void)
+static int lbr_fixup(void)
 {
     struct vcpu *curr = current;
 
@@ -4384,7 +4402,11 @@ static void lbr_fixup(void)
         lbr_tsx_fixup();
     if ( curr->arch.hvm.vmx.lbr_flags & LBR_FIXUP_BDF14 )
         bdw_erratum_bdf14_fixup();
+
+    return 0;
 }
+
+#endif
 
 /* Returns false if the vmentry has to be restarted */
 bool vmx_vmenter_helper(const struct cpu_user_regs *regs)
@@ -4488,8 +4510,11 @@ bool vmx_vmenter_helper(const struct cpu_user_regs *regs)
     }
 
  out:
-    if ( unlikely(curr->arch.hvm.vmx.lbr_flags & LBR_FIXUP_MASK) )
-        lbr_fixup();
+    if (unlikely(curr->arch.hvm.vmx.lbr_flags & LBR_FIXUP_MASK)) {
+        if (lbr_fixup()) {
+            return false;
+        }
+    }
 
     HVMTRACE_ND(VMENTRY, 0, 1/*cycles*/, 0, 0, 0, 0, 0, 0, 0);
 
