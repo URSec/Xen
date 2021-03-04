@@ -1094,6 +1094,10 @@ static bool_t nvmx_vpid_enabled(const struct vcpu *v)
 
 static void nvmx_set_vmcs_pointer(struct vcpu *v, struct vmcs_struct *vvmcs)
 {
+#ifdef CONFIG_SVA
+    panic("nvmx_set_vmcs_pointer(): Nested VMX is not yet supported in CONFIG_SVA.\n");
+#endif
+
     paddr_t vvmcs_maddr = v->arch.hvm.vmx.vmcs_shadow_maddr;
 
     __vmpclear(vvmcs_maddr);
@@ -1109,6 +1113,10 @@ static void nvmx_set_vmcs_pointer(struct vcpu *v, struct vmcs_struct *vvmcs)
 
 static void nvmx_clear_vmcs_pointer(struct vcpu *v, struct vmcs_struct *vvmcs)
 {
+#ifdef CONFIG_SVA
+    panic("nvmx_clear_vmcs_pointer(): Nested VMX is not yet supported in CONFIG_SVA.\n");
+#endif
+
     paddr_t vvmcs_maddr = v->arch.hvm.vmx.vmcs_shadow_maddr;
 
     __vmpclear(vvmcs_maddr);

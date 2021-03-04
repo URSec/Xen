@@ -1320,7 +1320,10 @@ static int construct_vmcs(struct vcpu *v)
 
     __vmwrite(GUEST_INTERRUPTIBILITY_INFO, 0);
     __vmwrite(GUEST_DR7, 0);
+
+#ifndef CONFIG_SVA /* Shade does not yet support nested VMX. */
     __vmwrite(VMCS_LINK_POINTER, ~0UL);
+#endif
 
     v->arch.hvm.vmx.exception_bitmap = HVM_TRAP_MASK
               | (paging_mode_hap(d) ? 0 : (1U << TRAP_page_fault))
