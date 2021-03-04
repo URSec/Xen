@@ -1271,7 +1271,15 @@ static int construct_vmcs(struct vcpu *v)
     __vmwrite(PAGE_FAULT_ERROR_CODE_MASK, 0);
     __vmwrite(PAGE_FAULT_ERROR_CODE_MATCH, 0);
 
+    /*
+     * SVA: Shade takes care of this field for us. (It sets it to the exact
+     * same 0 that vanilla Xen would. This field controls a feature which is
+     * only useful if VMX is being used without EPT, and it seems that Xen
+     * isn't any more interested in it than Shade is.)
+     */
+#ifndef CONFIG_SVA
     __vmwrite(CR3_TARGET_COUNT, 0);
+#endif
 
     __vmwrite(GUEST_ACTIVITY_STATE, 0);
 
