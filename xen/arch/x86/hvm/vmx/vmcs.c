@@ -878,6 +878,12 @@ static void vmx_set_host_env(struct vcpu *v)
 void vmx_clear_msr_intercept(struct vcpu *v, unsigned int msr,
                              enum vmx_msr_intercept_type type)
 {
+#ifdef CONFIG_SVA
+    int sva_vmid = (int)v->arch.hvm.vmx.vmcs_pa;
+    enum vmx_exit_bitmap_rw ty = (enum vmx_exit_bitmap_rw)type;
+    BUG_ON(sva_vmx_msr_intercept_clear(sva_vmid, msr, ty));
+#else
+
     struct vmx_msr_bitmap *msr_bitmap = v->arch.hvm.vmx.msr_bitmap;
     struct domain *d = v->domain;
 
@@ -905,11 +911,18 @@ void vmx_clear_msr_intercept(struct vcpu *v, unsigned int msr,
     }
     else
         ASSERT(!"MSR out of range for interception\n");
+#endif
 }
 
 void vmx_set_msr_intercept(struct vcpu *v, unsigned int msr,
                            enum vmx_msr_intercept_type type)
 {
+#ifdef CONFIG_SVA
+    int sva_vmid = (int)v->arch.hvm.vmx.vmcs_pa;
+    enum vmx_exit_bitmap_rw ty = (enum vmx_exit_bitmap_rw)type;
+    BUG_ON(sva_vmx_msr_intercept_set(sva_vmid, msr, ty));
+#else
+
     struct vmx_msr_bitmap *msr_bitmap = v->arch.hvm.vmx.msr_bitmap;
 
     /* VMX MSR bitmap supported? */
@@ -933,6 +946,7 @@ void vmx_set_msr_intercept(struct vcpu *v, unsigned int msr,
     }
     else
         ASSERT(!"MSR out of range for interception\n");
+#endif
 }
 
 bool vmx_msr_is_intercepted(struct vmx_msr_bitmap *msr_bitmap,
@@ -1146,6 +1160,7 @@ static int construct_vmcs(struct vcpu *v)
     /* MSR access bitmap. */
     if ( cpu_has_vmx_msr_bitmap )
     {
+#ifndef CONFIG_SVA
         struct vmx_msr_bitmap *msr_bitmap = alloc_xenheap_page();
 
         if ( msr_bitmap == NULL )
@@ -1157,6 +1172,7 @@ static int construct_vmcs(struct vcpu *v)
         memset(msr_bitmap, ~0, PAGE_SIZE);
         v->arch.hvm.vmx.msr_bitmap = msr_bitmap;
         __vmwrite(MSR_BITMAP, virt_to_maddr(msr_bitmap));
+#endif
 
         vmx_clear_msr_intercept(v, MSR_FS_BASE, VMX_MSR_RW);
         vmx_clear_msr_intercept(v, MSR_GS_BASE, VMX_MSR_RW);
@@ -1361,7 +1377,7 @@ static int construct_vmcs(struct vcpu *v)
         rc = vmx_add_msr(v, MSR_FLUSH_CMD, FLUSH_CMD_L1D,
                          VMX_MSR_GUEST_LOADONLY);
 
- out:
+ __maybe_unused out:
     vmx_vmcs_exit(v);
 
     return rc;
@@ -1933,8 +1949,8 @@ void vmx_destroy_vmcs(struct vcpu *v)
 #ifndef CONFIG_SVA
     free_xenheap_page(v->arch.hvm.vmx.host_msr_area);
     free_xenheap_page(v->arch.hvm.vmx.msr_area);
-#endif
     free_xenheap_page(v->arch.hvm.vmx.msr_bitmap);
+#endif
 }
 
 void vmx_vmentry_failure(void)

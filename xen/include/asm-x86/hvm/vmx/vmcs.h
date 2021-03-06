@@ -141,7 +141,9 @@ struct vmx_vcpu {
     uint64_t             cstar;
     uint64_t             sfmask;
 
+#ifndef CONFIG_SVA
     struct vmx_msr_bitmap *msr_bitmap;
+#endif
 
 #ifndef CONFIG_SVA
     /*
