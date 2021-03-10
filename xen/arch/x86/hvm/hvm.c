@@ -1492,7 +1492,37 @@ int hvm_vcpu_initialise(struct vcpu *v)
     int rc;
     struct domain *d = v->domain;
 
+    /*
+     * SVA: it seems that Xen calls hvm_asid_flush_vcpu() here not actually
+     * with the intent of performing a flush, but because the call results in
+     * a fresh ASID being "drawn" from the generational-increment pool and
+     * assigned to this vCPU. (No flush is actually performed as a result of
+     * this, because vanilla Xen performs single-context flushes indirectly
+     * by way of incrementing the ASID.) This is necessary because otherwise
+     * this new vCPU's ASID will be uninitialized.
+     *
+     * Under SVA, this is unneccessary, as we have eschewed the
+     * generational-increment scheme entirely in favor of directly calling
+     * Shade's INVVPID intrinsics. (The generational-increment scheme
+     * apparently exists in vanilla Xen as a workaround for older processors
+     * that don't support single-context INVVPID.)
+     *
+     * Not only is this call unnecessary under SVA, it would actually lead to
+     * an error and subsequent crash, as the Shade INVVPID intrinsic can't be
+     * meaningfully called until an SVA VMID has been assigned to this vCPU.
+     * That doesn't occur until the call to hvm_funcs.vcpu_initialise()
+     * below, wherein sva_allocvm() is called to allocate a VMCS. Attempting
+     * to call hvm_asid_flush_vcpu() before that will result in a garbage
+     * VMID being passed to the VPID flush intrinsic. (Generally speaking,
+     * that's harmless, as an extraneous flush does not harm correctness; but
+     * if the value 0 is passed, the processor will reject it because VPID=0
+     * represents the host and is considered invalid. SVA will, for this
+     * reason, never assign a VMID of 0, but 0 can readily occur as an
+     * uninitialized value.)
+     */
+#ifndef CONFIG_SVA
     hvm_asid_flush_vcpu(v);
+#endif
 
     spin_lock_init(&v->arch.hvm.tm_lock);
     INIT_LIST_HEAD(&v->arch.hvm.tm_list);

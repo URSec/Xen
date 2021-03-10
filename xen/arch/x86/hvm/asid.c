@@ -128,17 +128,7 @@ void hvm_asid_flush_vcpu(struct vcpu *v)
      * doesn't exist.
      */
 
-    /* Get the SVA VM ID corresponding to this VMCS address.
-     *
-     * FIXME: this is a temporary hack for incremental porting. Eventually,
-     * we want Xen to not have the VMCS paddr pointer at all and instead
-     * track the SVA VM ID directly. sva_get_vmid_from_vmcs() is a
-     * brute-force solution (it does a linear search through SVA's VM
-     * descriptor array until it finds one whose VMCS address matches that
-     * provided) but it works "well enough" at this stage. */
-    int sva_vmid = sva_get_vmid_from_vmcs(v->arch.hvm.vmx.vmcs_pa);
-
-    sva_flush_vpid_single(sva_vmid,
+    sva_flush_vpid_single((int)v->arch.hvm.vmx.vmcs_pa,
         false /* don't retain global translations */);
 #else
     hvm_asid_flush_vcpu_asid(&v->arch.hvm.n1asid);

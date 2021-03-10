@@ -483,27 +483,13 @@ static int vmx_init_vmcs_config(void)
     return 0;
 }
 
+/*
+ * These functions are not needed in CONFIG_SVA since their upstream callers
+ * call Shade intrinsics directly instead.
+ */
+#ifndef CONFIG_SVA
 static paddr_t vmx_alloc_vmcs(void)
 {
-#ifdef CONFIG_SVA
-    /*
-     * Ask SVA to create a new VM. This allocates a VMCS and initializes
-     * SVA's metadata structures for the VM.
-     *
-     * For now, we pass null pointers for initial VMCS controls, initial VM
-     * state, and initial extended page table root pointer. Those will be
-     * filled in later as we continue porting Xen and have it put more of the
-     * VM life-cycle in SVA's hands.
-     */
-    int sva_vmid = sva_allocvm(NULL, NULL, NULL);
-
-    if (sva_vmid <= 0)
-        panic("Xen vmx_alloc_vmcs(): sva_allocvm() returned %d (failure).\n",
-              sva_vmid);
-
-    paddr_t vmcs_paddr = sva_get_vmcs_paddr(sva_vmid);
-    return vmcs_paddr;
-#else /* non-SVA case (!#ifdef CONFIG_SVA) */
     struct page_info *pg;
     struct vmcs_struct *vmcs;
 
@@ -519,31 +505,13 @@ static paddr_t vmx_alloc_vmcs(void)
     unmap_domain_page(vmcs);
 
     return page_to_maddr(pg);
-#endif /* end else (!#ifdef CONFIG_SVA) */
 }
 
 static void vmx_free_vmcs(paddr_t pa)
 {
-#ifdef CONFIG_SVA
-    /* Find the SVA numeric ID corresponding to this VMCS. */
-    int sva_vmid = sva_get_vmid_from_vmcs(pa);
-
-    if (sva_vmid <= 0)
-        panic("Xen vmx_free_vmcs(): got return value %d while asking SVA to "
-              "look up the VMID corresponding to the VMCS at physical "
-              "address 0x%lx. This means SVA doesn't know of any VM "
-              "corresponding to this VMCS, which shouldn't happen.\n",
-              sva_vmid, pa);
-
-    /*
-     * Ask SVA to free the VM. This returns the VMCS to the secure memory
-     * frame cache and clears SVA's metadata structures for this VM.
-     */
-    sva_freevm(sva_vmid);
-#else /* non-SVA case (!#ifdef CONFIG_SVA) */
     free_domheap_page(maddr_to_page(pa));
-#endif /* end else (!#ifdef CONFIG_SVA) */
 }
+#endif /* end #ifndef CONFIG_SVA */
 
 static void __vmx_clear_vmcs(void *info)
 {
@@ -1856,17 +1824,60 @@ int vmx_create_vmcs(struct vcpu *v)
     struct vmx_vcpu *vmx = &v->arch.hvm.vmx;
     int rc;
 
+#ifdef CONFIG_SVA
+    /*
+     * Ask SVA to create a new VM. This allocates a VMCS and initializes
+     * SVA's metadata structures for the VM.
+     *
+     * For now, we pass null pointers for initial VMCS controls, initial VM
+     * state, and initial extended page table root pointer. Those will be
+     * filled in later as we continue porting Xen and have it put more of the
+     * VM life-cycle in SVA's hands.
+     */
+    int sva_vmid = sva_allocvm(NULL, NULL, NULL);
+
+    if (sva_vmid <= 0)
+    {
+        printk("Xen vmx_alloc_vmcs(): sva_allocvm() returned %d (failure).\n",
+              sva_vmid);
+        return -ENOMEM;
+    }
+
+    /*
+     * To avoid having to change a lot of function interfaces within Xen, we
+     * store the SVA VMID within the VMCS physical address field, since it
+     * logically functions as an opaque handle for the VMCS. This is feasible
+     * since, even though we are converting from a signed to an unsigned
+     * type, negative values are only used to represent an sva_allocvm()
+     * failure, which we have already checked for and handled above.
+     *
+     * Note: paddr_t is defined in asm/types.h as "unsigned long" (i.e.
+     * uint64_t on x86-64, the only platform currently supported by
+     * CONFIG_SVA). int is int32_t on x86-64, so this cast of a
+     * known-positive value cannot overflow or underflow.
+     */
+    vmx->vmcs_pa = (paddr_t) sva_vmid;
+#else
     if ( (vmx->vmcs_pa = vmx_alloc_vmcs()) == 0 )
         return -ENOMEM;
+#endif
 
     INIT_LIST_HEAD(&vmx->active_list);
+
+#ifndef CONFIG_SVA /* This happens implicitly as part of sva_allocvm(). */
     __vmpclear(vmx->vmcs_pa);
+#endif
+
     vmx->active_cpu = -1;
     vmx->launched   = 0;
 
     if ( (rc = construct_vmcs(v)) != 0 )
     {
+#ifdef CONFIG_SVA
+        sva_freevm((int)vmx->vmcs_pa);
+#else
         vmx_free_vmcs(vmx->vmcs_pa);
+#endif
         return rc;
     }
 
@@ -1879,7 +1890,15 @@ void vmx_destroy_vmcs(struct vcpu *v)
 
     vmx_clear_vmcs(v);
 
+#ifdef CONFIG_SVA
+    /*
+     * Ask SVA to free the VM. This returns the VMCS to the secure memory
+     * frame cache and clears SVA's metadata structures for this VM.
+     */
+    sva_freevm((int)vmx->vmcs_pa);
+#else
     vmx_free_vmcs(vmx->vmcs_pa);
+#endif
 
     free_xenheap_page(v->arch.hvm.vmx.host_msr_area);
     free_xenheap_page(v->arch.hvm.vmx.msr_area);

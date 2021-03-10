@@ -101,7 +101,19 @@ struct pi_blocking_vcpu {
 };
 
 struct vmx_vcpu {
-    /* Physical address of VMCS. */
+    /*
+     * Physical address of VMCS.
+     *
+     * SVA: Under CONFIG_SVA, this field instead stores an SVA VMID, which is
+     * an opaque handle by which the actual VMCS can be referenced in Shade
+     * intrinsic calls. SVA VMIDs are actually of type int (int32_t), but for
+     * convenience's sake (to avoid having to change a lot of Xen internal
+     * interfaces) we cast it to a paddr_t (uint64_t) so we can store it
+     * here. We ensure that the type divergence doesn't result in an
+     * underflow by checking for negative values (which represent error
+     * conditions, not real VMCSes) when we call sva_allocvm() in
+     * vmx_create_vmcs().
+     */
     paddr_t              vmcs_pa;
     /* VMCS shadow machine address. */
     paddr_t              vmcs_shadow_maddr;

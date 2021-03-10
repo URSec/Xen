@@ -351,47 +351,36 @@ extern uint8_t posted_intr_vector;
 
 #ifdef CONFIG_SVA
 
-static always_inline void __vmptrld(u64 addr)
+/*
+ * N.B.: Since we have repurposed the vmcs_pa field under struct vcpu to
+ * store the SVA VMID instead of the actual VMCS physical address, Xen code
+ * should correctly pass the SVA VMID to us here in lieu of the non-SVA
+ * case's "addr" parameter. Note that we still need to receive the parameter
+ * as type u64, since paddr_t (i.e. unsigned long i.e. u64) is the type of
+ * vmcs_pa, even though the actual SVA VMID is of type int (int32_t).
+ */
+static always_inline void __vmptrld(u64 sva_vmid)
 {
-    /* Get the SVA VM ID corresponding to this VMCS address.
-     *
-     * FIXME: this is a temporary hack for incremental porting. Eventually,
-     * we want Xen to not have the VMCS paddr pointer at all and instead
-     * track the SVA VM ID directly. sva_get_vmid_from_vmcs() is a
-     * brute-force solution (it does a linear search through SVA's VM
-     * descriptor array until it finds one whose VMCS address matches that
-     * provided) but it works "well enough" at this stage. */
-    int sva_vmid = sva_get_vmid_from_vmcs(addr);
-
-    BUG_ON(sva_loadvm(sva_vmid));
+    BUG_ON(sva_loadvm((int)sva_vmid));
 }
 
-static always_inline void __vmpclear(u64 addr)
+static always_inline void __vmpclear(u64 sva_vmid)
 {
-    /* Get the SVA VM ID corresponding to this VMCS address.
-     *
-     * FIXME: this is a temporary hack for incremental porting. Eventually,
-     * we want Xen to not have the VMCS paddr pointer at all and instead
-     * track the SVA VM ID directly. sva_get_vmid_from_vmcs() is a
-     * brute-force solution (it does a linear search through SVA's VM
-     * descriptor array until it finds one whose VMCS address matches that
-     * provided) but it works "well enough" at this stage. */
-    int sva_vmid = sva_get_vmid_from_vmcs(addr);
-
     /*
-     * TODO: This should BUG_ON failure, but we currently allow it to fail
-     * because we sometimes call it on a VM that hasn't been previously
-     * loaded.
+     * TODO: This should BUG_ON failure, but we currently allow it to
+     * "silently" fail because we sometimes call it on a VM that hasn't been
+     * previously loaded. (sva_unloadvm() will detect this situation and
+     * treat it as a no-op, but print a warning to the debug console.)
      *
-     * (Most likely, that is occurring because Xen is trying to use VMCLEAR
+     * Most likely, that is occurring because Xen is trying to use VMCLEAR
      * to initialize a new VMCS, that being the way it works in the native
      * architecture. Shade instead incorporates that as part of the
      * sva_allocvm() operation, making the explicit VMCLEAR superfluous. It
      * is therefore safe to silently skip the errant VMCLEAR here - although
      * we should really fix the upstream call sites to not even call
-     * __vmpclear() under CONFIG_SVA.)
+     * __vmpclear() under CONFIG_SVA.
      */
-    sva_unloadvm(sva_vmid);
+    sva_unloadvm((int)sva_vmid);
 }
 
 /*
@@ -489,17 +478,7 @@ static always_inline void __invept(unsigned long type, uint64_t eptp)
 
 static inline void vpid_sync_vcpu_gva(struct vcpu *v, unsigned long gva)
 {
-    /* Get the SVA VM ID corresponding to this VMCS address.
-     *
-     * FIXME: this is a temporary hack for incremental porting. Eventually,
-     * we want Xen to not have the VMCS paddr pointer at all and instead
-     * track the SVA VM ID directly. sva_get_vmid_from_vmcs() is a
-     * brute-force solution (it does a linear search through SVA's VM
-     * descriptor array until it finds one whose VMCS address matches that
-     * provided) but it works "well enough" at this stage. */
-    int sva_vmid = sva_get_vmid_from_vmcs(v->arch.hvm.vmx.vmcs_pa);
-
-    sva_flush_vpid_addr(sva_vmid, gva);
+    sva_flush_vpid_addr((int)v->arch.hvm.vmx.vmcs_pa, gva);
 }
 
 static inline void vpid_sync_all(void)

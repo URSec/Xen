@@ -107,13 +107,12 @@ void vmx_do_vmentry_sva(void)
     struct cpu_user_regs *guest_regs = guest_cpu_user_regs();
 
     /*
-     * Determine the numeric identifier that SVA uses to refer to this vCPU.
-     *
-     * (NOTE: this is a temporary hack during porting; once we have fully
-     * given control of the VMCS to SVA, Xen will no longer have a pointer to
-     * the VMCS, but will use SVA's numeric identifier instead.)
+     * SVA uses an opaque numeric identifier as a handle for referencing a
+     * particular vCPU in calls to Shade intrinsics, rather than giving Xen
+     * access to the raw physical address of the VMCS. For convenience, we
+     * store this within the existing vmcs_pa field under struct vcpu.
      */
-    int sva_vmid = sva_get_vmid_from_vmcs(current_vcpu->arch.hvm.vmx.vmcs_pa);
+    int sva_vmid = (int) current_vcpu->arch.hvm.vmx.vmcs_pa;
 
     /*
      * Run the guest vCPU and handle its VM exits in an infinite loop until

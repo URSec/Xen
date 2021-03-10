@@ -205,13 +205,12 @@ void expand_xsave_states(struct vcpu *v, void *dest, unsigned int size)
      * layout; they only differ in how they allocate the
      * statically-indeterminate space at the end for the processor-specific
      * portions of the XSAVE block. If this isn't true we're in trouble
-     * (hence the assert).
+     * (hence the assert).)
      */
     union xsave_area_max xsave_data;
     ASSERT(sizeof(xsave_data) >= size);
 
-    int sva_vmid = sva_get_vmid_from_vmcs(v->arch.hvm.vmx.vmcs_pa);
-    sva_getvmfpu(sva_vmid, &xsave_data);
+    sva_getvmfpu((int)v->arch.hvm.vmx.vmcs_pa, &xsave_data);
 
     const struct xsave_struct *xsave = (const struct xsave_struct*)&xsave_data;
 #endif
