@@ -335,11 +335,28 @@
 #define MSR_X2APIC_FIRST                0x00000800
 #define MSR_X2APIC_LAST                 0x00000bff
 
+#define MSR_X2APIC_ID                   0x00000802
+#define MSR_X2APIC_VERSION              0x00000803
 #define MSR_X2APIC_TPR                  0x00000808
 #define MSR_X2APIC_PPR                  0x0000080a
 #define MSR_X2APIC_EOI                  0x0000080b
+#define MSR_X2APIC_LDR                  0x0000080d
+#define MSR_X2APIC_SIVR                 0x0000080f
+#define MSR_X2APIC_ISR(n)               (0x00000810 + (n))
+#define MSR_X2APIC_TMR(n)               (0x00000818 + (n))
+#define MSR_X2APIC_IRR(n)               (0x00000820 + (n))
+#define MSR_X2APIC_ESR                  0x00000828
+#define MSR_X2APIC_LVT_CMCI             0x0000082f
+#define MSR_X2APIC_ICR                  0x00000830
+#define MSR_X2APIC_LVT_TIMER            0x00000832
+#define MSR_X2APIC_LVT_THERMAL          0x00000833
+#define MSR_X2APIC_LVT_PMI              0x00000834
+#define MSR_X2APIC_LVT_LINT0            0x00000835
+#define MSR_X2APIC_LVT_LINT1            0x00000836
+#define MSR_X2APIC_LVT_ERROR            0x00000837
 #define MSR_X2APIC_TMICT                0x00000838
 #define MSR_X2APIC_TMCCT                0x00000839
+#define MSR_X2APIC_TMDIV                0x0000083e
 #define MSR_X2APIC_SELF                 0x0000083f
 
 #define MSR_IA32_UCODE_WRITE		0x00000079

@@ -3137,7 +3137,6 @@ void vmx_vlapic_msr_changed(struct vcpu *v)
 {
     int virtualize_x2apic_mode;
     struct vlapic *vlapic = vcpu_vlapic(v);
-    unsigned int msr;
 
     virtualize_x2apic_mode = ( (cpu_has_vmx_apic_reg_virt ||
                                 cpu_has_vmx_virtual_intr_delivery) &&
@@ -3148,6 +3147,15 @@ void vmx_vlapic_msr_changed(struct vcpu *v)
         return;
 
     vmx_vmcs_enter(v);
+
+#ifdef CONFIG_SVA
+    /*
+     * SVA requires that the vlAPIC be in x2APIC mode *before* clearing MSR
+     * intercepts.
+     */
+    vmx_install_vlapic_mapping_sva(v);
+#endif
+
     v->arch.hvm.vmx.secondary_exec_control &=
         ~(SECONDARY_EXEC_VIRTUALIZE_APIC_ACCESSES |
           SECONDARY_EXEC_VIRTUALIZE_X2APIC_MODE);
@@ -3160,13 +3168,31 @@ void vmx_vlapic_msr_changed(struct vcpu *v)
                 SECONDARY_EXEC_VIRTUALIZE_X2APIC_MODE;
             if ( cpu_has_vmx_apic_reg_virt )
             {
-                for ( msr = MSR_X2APIC_FIRST;
-                      msr <= MSR_X2APIC_FIRST + 0xff; msr++ )
-                    vmx_clear_msr_intercept(v, msr, VMX_MSR_R);
-
-                vmx_set_msr_intercept(v, MSR_X2APIC_PPR, VMX_MSR_R);
-                vmx_set_msr_intercept(v, MSR_X2APIC_TMICT, VMX_MSR_R);
-                vmx_set_msr_intercept(v, MSR_X2APIC_TMCCT, VMX_MSR_R);
+                vmx_clear_msr_intercept(v, MSR_X2APIC_ID, VMX_MSR_R);
+                vmx_clear_msr_intercept(v, MSR_X2APIC_VERSION, VMX_MSR_R);
+                vmx_clear_msr_intercept(v, MSR_X2APIC_TPR, VMX_MSR_R);
+                /* No PPR */
+                /* No EOI */
+                vmx_clear_msr_intercept(v, MSR_X2APIC_LDR, VMX_MSR_R);
+                vmx_clear_msr_intercept(v, MSR_X2APIC_SIVR, VMX_MSR_R);
+                for (int i = 0; i < 8; ++i) {
+                    vmx_clear_msr_intercept(v, MSR_X2APIC_ISR(i), VMX_MSR_R);
+                    vmx_clear_msr_intercept(v, MSR_X2APIC_TMR(i), VMX_MSR_R);
+                    vmx_clear_msr_intercept(v, MSR_X2APIC_IRR(i), VMX_MSR_R);
+                }
+                vmx_clear_msr_intercept(v, MSR_X2APIC_ESR, VMX_MSR_R);
+                vmx_clear_msr_intercept(v, MSR_X2APIC_LVT_CMCI, VMX_MSR_R);
+                vmx_clear_msr_intercept(v, MSR_X2APIC_ICR, VMX_MSR_R);
+                vmx_clear_msr_intercept(v, MSR_X2APIC_LVT_TIMER, VMX_MSR_R);
+                vmx_clear_msr_intercept(v, MSR_X2APIC_LVT_THERMAL, VMX_MSR_R);
+                vmx_clear_msr_intercept(v, MSR_X2APIC_LVT_PMI, VMX_MSR_R);
+                vmx_clear_msr_intercept(v, MSR_X2APIC_LVT_LINT0, VMX_MSR_R);
+                vmx_clear_msr_intercept(v, MSR_X2APIC_LVT_LINT1, VMX_MSR_R);
+                vmx_clear_msr_intercept(v, MSR_X2APIC_LVT_ERROR, VMX_MSR_R);
+                /* No TMICT */
+                /* No TMCCT */
+                vmx_clear_msr_intercept(v, MSR_X2APIC_TMDIV, VMX_MSR_R);
+                /* No SELF */
             }
             if ( cpu_has_vmx_virtual_intr_delivery )
             {
@@ -3179,17 +3205,17 @@ void vmx_vlapic_msr_changed(struct vcpu *v)
             v->arch.hvm.vmx.secondary_exec_control |=
                 SECONDARY_EXEC_VIRTUALIZE_APIC_ACCESSES;
     }
+
+#ifndef CONFIG_SVA /* SVA clears the MSR intercepts for us. */
     if ( !(v->arch.hvm.vmx.secondary_exec_control &
            SECONDARY_EXEC_VIRTUALIZE_X2APIC_MODE) )
-        for ( msr = MSR_X2APIC_FIRST;
+        for ( unsigned int msr = MSR_X2APIC_FIRST;
               msr <= MSR_X2APIC_FIRST + 0xff; msr++ )
             vmx_set_msr_intercept(v, msr, VMX_MSR_RW);
 
-#ifdef CONFIG_SVA
-    vmx_install_vlapic_mapping_sva(v);
-#else
     vmx_update_secondary_exec_control(v);
 #endif
+
     vmx_vmcs_exit(v);
 }
 
