@@ -169,7 +169,9 @@ struct hvm_domain {
 
     uint64_t tsc_scaling_ratio;
 
+#ifndef CONFIG_SVA /* SVA owns the IO bitmap. */
     unsigned long *io_bitmap;
+#endif
 
     /* List of guest to machine IO ports mapping. */
     struct list_head g2m_ioport_list;

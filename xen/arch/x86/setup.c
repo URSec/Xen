@@ -1955,6 +1955,7 @@ int __hwdom_init xen_in_range(unsigned long mfn)
     return 0;
 }
 
+#ifndef CONFIG_SVA
 static int __hwdom_init io_bitmap_cb(unsigned long s, unsigned long e,
                                      void *ctx)
 {
@@ -1967,13 +1968,17 @@ static int __hwdom_init io_bitmap_cb(unsigned long s, unsigned long e,
 
     return 0;
 }
+#endif
 
 void __hwdom_init setup_io_bitmap(struct domain *d)
 {
-    int rc;
+    int __maybe_unused rc;
 
     if ( is_hvm_domain(d) )
     {
+#ifdef CONFIG_SVA
+        BUG(); // Unimplemented
+#else
         bitmap_fill(d->arch.hvm.io_bitmap, 0x10000);
         rc = rangeset_report_ranges(d->arch.ioport_caps, 0, 0x10000,
                                     io_bitmap_cb, d);
@@ -1988,6 +1993,7 @@ void __hwdom_init setup_io_bitmap(struct domain *d)
         __set_bit(0xcf8, d->arch.hvm.io_bitmap);
         __set_bit(RTC_PORT(0), d->arch.hvm.io_bitmap);
         __set_bit(RTC_PORT(1), d->arch.hvm.io_bitmap);
+#endif
     }
 }
 

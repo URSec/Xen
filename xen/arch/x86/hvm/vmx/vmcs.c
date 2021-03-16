@@ -1187,9 +1187,11 @@ static int construct_vmcs(struct vcpu *v)
             vmx_clear_msr_intercept(v, MSR_IA32_BNDCFGS, VMX_MSR_RW);
     }
 
+#ifndef CONFIG_SVA
     /* I/O access bitmap. */
     __vmwrite(IO_BITMAP_A, __pa(d->arch.hvm.io_bitmap));
     __vmwrite(IO_BITMAP_B, __pa(d->arch.hvm.io_bitmap) + PAGE_SIZE);
+#endif
 
     if ( cpu_has_vmx_virtual_intr_delivery )
     {

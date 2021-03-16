@@ -468,6 +468,12 @@ static int vmx_vcpu_initialise(struct vcpu *v)
 
     vmx_install_vlapic_mapping(v);
 
+#ifdef CONFIG_SVA
+    int sva_vmid = (int)v->arch.hvm.vmx.vmcs_pa;
+    sva_vmx_io_intercept_clear(sva_vmid, 0x80);
+    sva_vmx_io_intercept_clear(sva_vmid, 0xed);
+#endif
+
     return 0;
 }
 

@@ -628,6 +628,7 @@ int hvm_domain_initialise(struct domain *d)
     /* need link to containing domain */
     d->arch.hvm.pl_time->domain = d;
 
+#ifndef CONFIG_SVA
     /* Set the default IO Bitmap. */
     if ( is_hardware_domain(d) )
     {
@@ -641,6 +642,7 @@ int hvm_domain_initialise(struct domain *d)
     }
     else
         d->arch.hvm.io_bitmap = hvm_io_bitmap;
+#endif
 
     register_g2m_portio_handler(d);
     register_vpci_portio_handler(d);
@@ -677,8 +679,10 @@ int hvm_domain_initialise(struct domain *d)
     stdvga_deinit(d);
     vioapic_deinit(d);
  fail1:
+#ifndef CONFIG_SVA
     if ( is_hardware_domain(d) )
         xfree(d->arch.hvm.io_bitmap);
+#endif
     xfree(d->arch.hvm.io_handler);
     xfree(d->arch.hvm.params);
     xfree(d->arch.hvm.pl_time);
