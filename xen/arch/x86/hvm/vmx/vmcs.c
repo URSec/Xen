@@ -1073,11 +1073,20 @@ static int construct_vmcs(struct vcpu *v)
      *  - VMCS Shadowing only when in nested VMX mode
      *  - PML only when logdirty is active
      *  - VMFUNC/#VE only if wanted by altp2m
+     *
+     *  SVA: always leave VPID enabled because the situations in which Xen
+     *  would disable it no longer apply (and we require hardware support for
+     *  the feature in our baseline). The code that (as noted above) should
+     *  ensure the VPID setting is "chosen at VMEntry time", in
+     *  vmx_vmentry_helper(), has been disabled in CONFIG_SVA, so if we
+     *  disable it here it'll never get enabled again.
      */
     v->arch.hvm.vmx.secondary_exec_control &=
         ~(SECONDARY_EXEC_DESCRIPTOR_TABLE_EXITING |
           SECONDARY_EXEC_VIRTUALIZE_X2APIC_MODE |
+#ifndef CONFIG_SVA
           SECONDARY_EXEC_ENABLE_VPID |
+#endif
           SECONDARY_EXEC_ENABLE_VMCS_SHADOWING |
           SECONDARY_EXEC_ENABLE_PML |
           SECONDARY_EXEC_ENABLE_VM_FUNCTIONS |
