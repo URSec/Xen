@@ -1838,12 +1838,11 @@ int vmx_create_vmcs(struct vcpu *v)
      * Ask SVA to create a new VM. This allocates a VMCS and initializes
      * SVA's metadata structures for the VM.
      *
-     * For now, we pass null pointers for initial VMCS controls, initial VM
-     * state, and initial extended page table root pointer. Those will be
-     * filled in later as we continue porting Xen and have it put more of the
-     * VM life-cycle in SVA's hands.
+     * For now, we pass a null pointer for the initial extended page table
+     * root pointer. That will be filled in later as we continue porting Xen
+     * and have it put more of the VM life-cycle in SVA's hands.
      */
-    int sva_vmid = sva_allocvm(NULL, NULL, NULL);
+    int sva_vmid = sva_allocvm(NULL);
 
     if (sva_vmid <= 0)
     {
