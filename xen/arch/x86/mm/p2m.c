@@ -707,6 +707,16 @@ int p2m_alloc_table(struct p2m_domain *p2m)
         return -ENOMEM;
     }
 
+#ifdef CONFIG_SVA
+    /*
+     * Make the newly-created top-level PTP read-only in Xen's direct map and
+     * declare its usage as an L4 EPT PTP to SVA.
+     */
+    paddr_t top_maddr = mfn_to_maddr(top_mfn);
+    ASSERT(xen_dmap_make_ro(__va(top_maddr)) == 0);
+    sva_declare_l4_eptpage(top_maddr);
+#endif
+
     p2m->phys_table = pagetable_from_mfn(top_mfn);
 
     if ( hap_enabled(d) )
@@ -745,10 +755,129 @@ void p2m_teardown(struct p2m_domain *p2m)
 
     p2m_lock(p2m);
     ASSERT(atomic_read(&d->shr_pages) == 0);
+
+#ifdef CONFIG_SVA
+    /*
+     * We need to ensure all of this p2m's associated PTPs are undeclared to
+     * SVA before they are returned to the domain's free pool.
+     *
+     * When an EPT mapping is replaced/removed on a live domain,
+     * ept_free_entry() is called to release the old intermediate tables that
+     * have been superseded by the new mapping. However, vanilla Xen doesn't
+     * do this when tearing down a domain; it just dumps all of the PTPs
+     * associated with its p2m back into the free pool in no particular
+     * order. (See the while-loop before which loops on
+     * page_list_remove_head(&p2m->pages).)
+     *
+     * This can lead to momentary inconsistencies in the PTP state during the
+     * teardown process, namely, a lower-level PTP could be freed while a
+     * higher-level PTE is still pointing to it. This is perfectly safe from
+     * Xen's perspective, as Xen has no intention of actually running the
+     * domain in this state and thus there is no real risk of a
+     * use-after-free.
+     *
+     * However, SVA will raise alarm bells about reference count violations
+     * if we try to undeclare a PTP which is still pointed to by a
+     * higher-level PTE. SVA doesn't know (and can't trust) that Xen will not
+     * attempt to run the guest with its PTPs in such an inconsistent state.
+     * SVA has to be strict about this because a compromised Xen could
+     * potentially exploit such a condition to induce a use-after-free and
+     * bypass SVA's memory restrictions.
+     *
+     * Hence to satisfy SVA, we need to ensure that *either*:
+     *  a) PTPs are undeclared in "top-to-bottom" order; or
+     *  b) All the mappings within the PTP hierarchy are invalidated prior to
+     *     undeclaring any of them.
+     * The most efficient method is to undeclare the PTPs "top-to-bottom",
+     * because sva_remove_page() will implicitly take care of invalidating
+     * the entries within each PTP as part of the undeclare process (since it
+     * can't trust Xen to have explicitly done it). (That is, if we went
+     * through and invalidated all the entries first so that we could then
+     * undeclare them in any order without violating refcounts, we would
+     * satisfy correctness, but SVA would still need to repeat that loop over
+     * the PTEs within each PTP to make sure we'd done so.)
+     *
+     * So, we will take care of this by first undeclaring the L4 PTP, and
+     * then explicitly calling ept_free_entry() on each of its entries, which
+     * will recursively free any intermediate tables below them and
+     * appropriately undeclare them to SVA in top-to-bottom order while doing
+     * so. After that, there should be nothing left in this p2m's page list
+     * except the L4 table. The while-loop below should then find only the L4
+     * remaining and return it to the free pool. All the PTPs will thus have
+     * been restored to the SVA frame type DATA and returned to R/W access in
+     * Xen's direct map before being returned to the free pool, allowing Xen
+     * to re-use them for other purposes in the future.
+     */
+
+    /* Undeclare the top-level (L4) PTP to SVA. */
+    paddr_t ptp_maddr = mfn_to_maddr(pagetable_get_mfn(p2m->phys_table));
+    sva_remove_page(ptp_maddr);
+
+    /* Restore write access to the outgoing PTP in Xen's direct map. */
+    ASSERT(xen_dmap_make_rw(__va(ptp_maddr)) == 0);
+
+    /*
+     * Recursively free any subtrees under the L4 in top-to-bottom order to
+     * satisfy SVA's reference counting.
+     */
+    ept_entry_t *l4_table = __va(ptp_maddr);
+    for (int i = 0; i < EPT_PAGETABLE_ENTRIES; i++)
+    {
+        /*
+         * Note: ept_free_entry() was originally a static function since it
+         * was only called by other code within arch/x86/mm/p2m-ept.c. To
+         * support calling it here we've removed the static qualifier.
+         *
+         * (This is sufficient for the purposes of our research port of Xen
+         * to SVA, since we only support Intel machines and do not support
+         * shadow paging. A production version would not be able to get away
+         * with directly calling an EPT-specific function here, at least not
+         * without checking to confirm we are running with HAP enabled on an
+         * Intel system.)
+         */
+        void ept_free_entry(struct p2m_domain *p2m, ept_entry_t *ept_entry, int level);
+
+        /*
+         * N.B.: The "level" parameter refers to the level of the PTP
+         * *pointed to* by the entry being freed (i.e. l4_table[i]). In this
+         * case, we are freeing a level-4 entry which points to a level-3
+         * table, so we pass the value of 3.
+         */
+        ept_free_entry(p2m, &l4_table[i], 3);
+    }
+#endif
+
     p2m->phys_table = pagetable_null();
 
     while ( (pg = page_list_remove_head(&p2m->pages)) )
+    {
+#ifdef CONFIG_SVA
+        /*
+         * SVA: there shouldn't be anything left on the page list at this
+         * point, because we explicitly freed the page tables top-to-bottom
+         * in the loop above to make sure they were undeclared to SVA in the
+         * right order. In case there *is* anything still on the list, we've
+         * left this debug check in place because these sorts of issues can
+         * be quite tricky to track down if we don't catch them here. (If a
+         * PTP is returned to the domain heap without being undeclared to
+         * SVA, SVA won't catch the error until Xen tries to use the frame
+         * somewhere else, which can be anywhere in the codebase.)
+         *
+         * If the page list is indeed empty here as it should be, this code
+         * should never fire, so this shouldn't impact performance unless
+         * there is a bug.
+         */
+        extern bool sva_check_frame_type(unsigned long paddr, bool expect_declared);
+        if (sva_check_frame_type(page_to_maddr(pg), false))
+        {
+            printk("p2m_teardown(): Attempting to free PTP (0x%016lx) "
+                "that is still declared to SVA.\n", page_to_maddr(pg));
+            BUG();
+        }
+#endif
+
         d->arch.paging.free_page(d, pg);
+    }
     p2m_unlock(p2m);
 }
 

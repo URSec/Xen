@@ -32,6 +32,8 @@
 #include <xen/keyhandler.h>
 #include <xen/softirq.h>
 
+#include <sva/vmx_intrinsics.h>
+
 #include "mm-locks.h"
 
 #define atomic_read_ept_entry(__pepte)                              \
@@ -56,7 +58,11 @@ static int atomic_write_ept_entry(struct p2m_domain *p2m,
     if ( rc )
         return rc;
 
+#ifdef CONFIG_SVA
+    sva_update_ept_mapping(&entryptr->epte, new.epte);
+#else
     write_atomic(&entryptr->epte, new.epte);
+#endif
 
     return 0;
 }
@@ -181,17 +187,138 @@ static void ept_p2m_type_to_flags(struct p2m_domain *p2m, ept_entry_t *entry,
 #define GUEST_TABLE_SUPER_PAGE  2
 #define GUEST_TABLE_POD_PAGE    3
 
-/* Fill in middle levels of ept table */
-static int ept_set_middle_entry(struct p2m_domain *p2m, ept_entry_t *ept_entry)
+/*
+ * Fill in middle levels of ept table
+ *
+ * SVA:
+ *  Added "level" parameter to propagate level information from callers
+ *  (which do have access to that information), since we need it in order to
+ *  declare newly-created PTPs to SVA at the correct level.
+ *
+ *  N.B.: "level" should indicate the level of the page-table to which the
+ *  middle entry being set will point. That is, if you are setting a middle
+ *  entry within a 3rd-level table, you should pass level=2. (This should be
+ *  consistent with how levels are counted in the various Xen code we have
+ *  extended to pass that parameter here.)
+ *
+ *  Aside:
+ *    It's debatable whether SVA should *actually* be requiring Xen to
+ *    distinctly declare EPT PTPs by level like this.
+ *
+ *    The level distinction *is* important for host (non-extended) paging,
+ *    because (for legacy reasons) the hardware PTPE format is not the same
+ *    across all levels; for this reason, vanilla Xen's shadow paging
+ *    implementation, like SVA, cares about distinguishing PTP levels.
+ *    Furthermore, Xen (possibly) needs to (for instance) treat higher-level
+ *    PTPs specially in order to reserve certain portions of the address
+ *    space for itself (much as SVA does with ghost memory).
+ *
+ *    By contrast, Xen makes no such distinction for EPT (this function,
+ *    ept_set_middle_entry(), unifies functionality paralleled by separate
+ *    per-level functions in the shadow paging code). This makes sense
+ *    because Intel sensibly defined the PTPE bit layout consistently across
+ *    all levels of the EPT hierarchy (which they could do because EPT
+ *    supported features like superpages from the start instead of bolting
+ *    them on later). And, like Xen, SVA has no need (at present, anyway) to
+ *    reserve portions of the EPT guest-physical address space for itself,
+ *    eliminating the need to treat certain PTEs specially.
+ *
+ *    We could, therefore, probably get away with merging the
+ *    sva_declare_lX_ept_page() intrinsics into one. That would eliminate the
+ *    need to add the "level" parameter to this function so we can choose the
+ *    right intrinsic. However, we would need to think about this more
+ *    carefully to ensure that doing so doesn't open up any weird loopholes
+ *    in SVA's refcount bookkeeping. Retaining the distinction between EPT
+ *    PTP levels also provides us the flexibility to have SVA
+ *    reserve/restrict portions of the guest-physical address space in the
+ *    future, as we do now in host-virtual space, in case that's useful to
+ *    more advanced security policies we might want to support in the future.
+ *    So for now, we'll leave the per-level distinction in place as it is.
+ */
+static int ept_set_middle_entry(struct p2m_domain *p2m,
+                                ept_entry_t *ept_entry,
+                                unsigned int level)
 {
-    mfn_t mfn;
-    ept_entry_t *table;
-    unsigned int i;
-
-    mfn = p2m_alloc_ptp(p2m, 0);
+    /*
+     * Allocate the next-level page table to which this middle entry will point.
+     */
+    mfn_t mfn = p2m_alloc_ptp(p2m, 0);
     if ( mfn_eq(mfn, INVALID_MFN) )
         return 0;
 
+    ept_entry_t *next_level_table = map_domain_page(mfn);
+
+    /*
+     * Set the "suppress #VE" bit for each entry in the new next-level page
+     * table.
+     */
+    for ( unsigned int i = 0; i < EPT_PAGETABLE_ENTRIES; i++ )
+        next_level_table[i].suppress_ve = 1;
+
+#ifdef CONFIG_SVA
+    /*
+     * Make the new next-level page table read-only in Xen's direct map. SVA
+     * will not let us declare it as a page-table page until we have done so
+     * (since Xen is not permitted to modify active page tables except by
+     * using SVA intrinsics to do so).
+     *
+     * Note that map_domain_page() is guaranteed to return a DMAP address
+     * under CONFIG_SVA.
+     */
+    ASSERT(xen_dmap_make_ro(next_level_table) == 0);
+
+    /*
+     * Declare the new next-level page table to SVA. Note that since
+     * p2m_alloc_ptp() has cleared the page's contents, and the only change
+     * we have made since then has been to set the "suppress #VE" bit, we can
+     * be sure that all of the entries within the new table will pass muster
+     * with the security checks SVA will perform when we do this.
+     */
+    switch (level)
+    {
+      case 1:
+        sva_declare_l1_eptpage(__pa(next_level_table));
+        break;
+      case 2:
+        sva_declare_l2_eptpage(__pa(next_level_table));
+        break;
+      case 3:
+        sva_declare_l3_eptpage(__pa(next_level_table));
+        break;
+      case 4:
+        panic("ept_set_middle_entry(): Xen is trying to point a 5th-level "
+            "EPTE to a 4th-level EPTP. SVA can't handle 5-level paging yet "
+            "so if you're seeing this, you may have bigger problems.\n");
+        break;
+      default:
+        panic("ept_set_middle_entry(): Cannot declare a level-%u EPT PTP to "
+            "SVA (>4 not yet supported).\n", level);
+        break;
+    }
+#endif
+
+    /*
+     * Construct the new middle entry that points to the new next-level page
+     * table we've created.
+     *
+     * N.B. (SVA-relevant but applies to non-SVA config as well):
+     *   This is passed back to the caller via the "ept_entry" out-parameter,
+     *   which should *NOT* point into the live page table. It is the
+     *   caller's responsibility to install the new entry into the live page
+     *   table explicitly with atomic_write_ept_entry().
+     *
+     *   Vanilla (non-SVA) Xen is inconstent about whether it calls this
+     *   function directly on the live page table vs. on a temporary copy
+     *   which it explicitly installs with atomic_write_ept_entry(). Since
+     *   the SVA port must use a different code path depending on which is
+     *   which (sva_update_ept_entry() vs. direct memory write), we have
+     *   refactored the callers that operated directly on the live page table
+     *   to no longer do so. As far as we can tell, vanilla Xen was being
+     *   sloppy to not do this from the beginning, as the piecemeal field
+     *   writes below are anything but atomic. (Perhaps the original
+     *   developers worked out the consequences of that and determined it to
+     *   be situationally OK, but a comment would have been appreciated.)
+     */
     ept_entry->epte = 0;
     ept_entry->mfn = mfn_x(mfn);
     ept_entry->access = p2m->default_access;
@@ -202,33 +329,72 @@ static int ept_set_middle_entry(struct p2m_domain *p2m, ept_entry_t *ept_entry)
 
     ept_entry->suppress_ve = 1;
 
-    table = map_domain_page(mfn);
-
-    for ( i = 0; i < EPT_PAGETABLE_ENTRIES; i++ )
-        table[i].suppress_ve = 1;
-
-    unmap_domain_page(table);
+    unmap_domain_page(next_level_table);
 
     return 1;
 }
 
-/* free ept sub tree behind an entry */
-static void ept_free_entry(struct p2m_domain *p2m, ept_entry_t *ept_entry, int level)
+/*
+ * free ept sub tree behind an entry
+ *
+ * SVA: made non-static so this function can be called by p2m_teardown()
+ * (arch/x86/mm/p2m.c).
+ *
+ * N.B.: The "level" parameter seems to refer to the level of the PTP *mapped
+ * by* ept_entry, e.g., if ept_entry is an entry within a 3rd-level PTP, then
+ * level should be 2, since that entry maps a level-2 PTP.
+ */
+void ept_free_entry(struct p2m_domain *p2m, ept_entry_t *ept_entry, int level)
 {
     /* End if the entry is a leaf entry. */
     if ( level == 0 || !is_epte_present(ept_entry) ||
          is_epte_superpage(ept_entry) )
         return;
 
+    ept_entry_t *epte = map_domain_page(_mfn(ept_entry->mfn));
+
+#ifdef CONFIG_SVA
+    /*
+     * Inform SVA that we are no longer using the page pointed to by this
+     * entry as a page-table page (PTP). This is necessary to permit re-use
+     * of the physical memory frame for a different purpose in the future
+     * (e.g. as a non-PTP, or as a PTP of different level/type).
+     *
+     * Note that we must do this *before* the recursive call to
+     * ept_free_entry(), because SVA requires us to undeclare PTPs in
+     * high-to-low level order if there is a possibility they could contain
+     * any valid mappings at undeclare time. This ensures that a live page
+     * table entry can never be left pointing to a freed lower-level PTP.
+     */
+    sva_remove_page(__pa(epte));
+
+    /*
+     * Restore write access to the outgoing PTP in Xen's direct map.
+     *
+     * Note that map_domain_page() is guaranteed to return a DMAP address
+     * under CONFIG_SVA.
+     */
+    ASSERT(xen_dmap_make_rw(epte) == 0);
+#endif
+
     if ( level > 1 )
     {
-        ept_entry_t *epte = map_domain_page(_mfn(ept_entry->mfn));
+        /*
+         * The entry we are freeing points to a 2nd-level or higher table. We
+         * need to recurse to ensure that any PTPs below that table are freed.
+         */
         for ( int i = 0; i < EPT_PAGETABLE_ENTRIES; i++ )
             ept_free_entry(p2m, epte + i, level - 1);
-        unmap_domain_page(epte);
     }
+
+    unmap_domain_page(epte);
     
     p2m_tlb_flush_sync(p2m);
+
+    /*
+     * Free the next-level PTP mapped by this entry. The recursive call above
+     * has ensured that all PTPs below it have already been freed.
+     */
     p2m_free_ptp(p2m, mfn_to_page(_mfn(ept_entry->mfn)));
 }
 
@@ -236,9 +402,6 @@ static bool_t ept_split_super_page(struct p2m_domain *p2m,
                                    ept_entry_t *ept_entry,
                                    unsigned int level, unsigned int target)
 {
-    ept_entry_t new_ept, *table;
-    uint64_t trunk;
-    unsigned int i;
     bool_t rv = 1;
 
     /* End if the entry is a leaf entry or reaches the target level. */
@@ -247,36 +410,89 @@ static bool_t ept_split_super_page(struct p2m_domain *p2m,
 
     ASSERT(is_epte_superpage(ept_entry));
 
-    if ( !ept_set_middle_entry(p2m, &new_ept) )
+    /* Create a next-level page table to replace this superpage entry. */
+    ept_entry_t new_ept;
+    if ( !ept_set_middle_entry(p2m, &new_ept, level) )
         return 0;
 
-    table = map_domain_page(_mfn(new_ept.mfn));
-    trunk = 1UL << ((level - 1) * EPT_TABLE_ORDER);
-
-    for ( i = 0; i < EPT_PAGETABLE_ENTRIES; i++ )
+    /* Populate the next-level page table with entries pointing to the
+     * consecutive slices of the former superpage. */
+    ept_entry_t *next_level_table = map_domain_page(_mfn(new_ept.mfn));
+    uint64_t slice_size = 1UL << ((level - 1) * EPT_TABLE_ORDER); /* size of slice in 4kB frames */
+    for ( unsigned int i = 0; i < EPT_PAGETABLE_ENTRIES; i++ )
     {
-        ept_entry_t *epte = table + i;
+        ept_entry_t slice_entry = *ept_entry;
 
-        *epte = *ept_entry;
-        epte->sp = (level > 1);
-        epte->mfn += i * trunk;
-        epte->snp = (iommu_enabled && iommu_snoop);
-        epte->suppress_ve = 1;
+        slice_entry.sp = (level > 1);
+        slice_entry.mfn += i * slice_size;
+        slice_entry.snp = (iommu_enabled && iommu_snoop);
+        slice_entry.suppress_ve = 1;
 
-        ept_p2m_type_to_flags(p2m, epte, epte->sa_p2mt, epte->access);
+        ept_p2m_type_to_flags(p2m, &slice_entry,
+            slice_entry.sa_p2mt, slice_entry.access);
 
-        if ( (level - 1) == target )
-            continue;
+        /*
+         * Recurse to continue splitting lower-level superpages until we've
+         * reached the intended target.
+         */
+        if ((level - 1) != target)
+        {
+            ASSERT(is_epte_superpage(&slice_entry));
 
-        ASSERT(is_epte_superpage(epte));
+            rv = ept_split_super_page(p2m, &slice_entry, level - 1, target);
+        }
 
-        if ( !(rv = ept_split_super_page(p2m, epte, level - 1, target)) )
+        /*
+         * SVA: The next-level table into which we are installing this entry
+         * has already been declared to SVA as a page-table page by
+         * ept_set_middle_entry(), and thus we cannot modify the entry
+         * directly in the table because it is no longer writable in Xen's
+         * DMAP (i.e. through the pointer map_domain_page() gave us).
+         *
+         * atomic_write_ept_entry() is implemented via the
+         * sva_update_ept_mapping() intrinsic under CONFIG_SVA, and thus will
+         * allow us to perform the write.
+         *
+         * Under non-CONFIG_SVA, the atomic write is implemented (on x86-64)
+         * as a plain memory store into the page table, so there is no need
+         * to special-case the code here.
+         */
+        int wrv = atomic_write_ept_entry(p2m,
+            &next_level_table[i], slice_entry, level - 1);
+        ASSERT(wrv == 0);
+
+        if (!rv)
             break;
     }
 
-    unmap_domain_page(table);
+    unmap_domain_page(next_level_table);
 
-    /* Even failed we should install the newly allocated ept page. */
+    /*
+     * Even in a failure case, we should pass the newly allocated EPT page up
+     * to the caller so it can decide what to do with it (probably free it
+     * before returning an error code of its own).
+     *
+     * N.B.: There may be a theoretical possibility of a memory leak here if we
+     * successfully split more than one level before failing. All our callers
+     * handle the failure case by merely freeing the uppermost new table that
+     * we return directly here, without recursing to free subsidiary tables.
+     * In practice, however, this is unlikely to a problem as the response to
+     * -ENOMEM is likely to tear the domain down entirely (at which point any
+     * associated PTPs still associated with it should be freed wholesale).
+     *
+     * (This may not be quite so harmless under CONFIG_SVA, as domain
+     * teardown needs to free PTPs in top-to-bottom order to avoid refcount
+     * violations. Since leaked PTPs are no longer accessible from a
+     * top-to-bottom walk, they won't be caught until the loop at the end of
+     * p2m_teardown(), which is not guaranteed to free PTPs in the correct
+     * order. See comments in p2m_teardown() for details. The implication of
+     * this is that an -ENOMEM situation may result in SVA crashing the whole
+     * system on a refcount violation instead of Xen being able to cleanly
+     * destroy the domain and continue on. This isn't important enough to
+     * address in our prototype, but it's something to be aware of if you're
+     * wondering why Xen is hard-crashing on what's supposed to be a domain
+     * crash.)
+     */
     *ept_entry = new_ept;
 
     return rv;
@@ -300,23 +516,18 @@ static int ept_next_level(struct p2m_domain *p2m, bool_t read_only,
                           ept_entry_t **table, unsigned long *gfn_remainder,
                           int next_level)
 {
-    unsigned long mfn;
-    ept_entry_t *ept_entry, e;
-    u32 shift, index;
-
-    shift = next_level * EPT_TABLE_ORDER;
-
-    index = *gfn_remainder >> shift;
+    u32 shift = next_level * EPT_TABLE_ORDER;
+    u32 index = *gfn_remainder >> shift;
 
     /* index must be falling into the page */
     ASSERT(index < EPT_PAGETABLE_ENTRIES);
 
-    ept_entry = (*table) + index;
+    ept_entry_t *ept_entry = (*table) + index;
 
     /* ept_next_level() is called (sometimes) without a lock.  Read
      * the entry once, and act on the "cached" entry after that to
      * avoid races. */
-    e = atomic_read_ept_entry(ept_entry);
+    ept_entry_t e = atomic_read_ept_entry(ept_entry);
 
     if ( !is_epte_present(&e) )
     {
@@ -326,17 +537,21 @@ static int ept_next_level(struct p2m_domain *p2m, bool_t read_only,
         if ( read_only )
             return GUEST_TABLE_MAP_FAILED;
 
-        if ( !ept_set_middle_entry(p2m, ept_entry) )
+        if ( !ept_set_middle_entry(p2m, &e, next_level) )
             return GUEST_TABLE_MAP_FAILED;
         else
-            e = atomic_read_ept_entry(ept_entry); /* Refresh */
+        {
+            /* Install the new next-level entry into the actual page table. */
+            int rc = atomic_write_ept_entry(p2m, ept_entry, e, next_level);
+            ASSERT(rc == 0);
+        }
     }
 
     /* The only time sp would be set here is if we had hit a superpage */
     if ( is_epte_superpage(&e) )
         return GUEST_TABLE_SUPER_PAGE;
 
-    mfn = e.mfn;
+    unsigned long mfn = e.mfn;
     unmap_domain_page(*table);
     *table = map_domain_page(_mfn(mfn));
     *gfn_remainder &= (1UL << shift) - 1;

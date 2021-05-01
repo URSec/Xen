@@ -1438,6 +1438,21 @@ void do_page_fault(struct cpu_user_regs *regs)
 
         show_execution_state(regs);
         show_page_walk(addr);
+
+#ifdef CONFIG_SVA
+        /*
+         * If the page fault was for a page that was present (but in some way
+         * violated protections), print additional metadata from SVA for the
+         * associated frame to help with diagnosing faults related to Xen
+         * attempting to violate SVA restrictions.
+         */
+        if (error_code & 0x1)
+        {
+            extern void sva_print_faulting_frame_metadata(void *vaddr);
+            sva_print_faulting_frame_metadata((void*)addr);
+        }
+#endif
+
         panic("FATAL PAGE FAULT\n"
               "[error_code=%04x]\n"
               "Faulting linear address: %p\n",
