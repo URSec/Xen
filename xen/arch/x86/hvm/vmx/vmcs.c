@@ -1354,7 +1354,11 @@ static int construct_vmcs(struct vcpu *v)
         struct ept_data *ept = &p2m->ept;
 
         ept->mfn = pagetable_get_pfn(p2m_get_pagetable(p2m));
+#ifdef CONFIG_SVA
+        sva_load_eptable(v->arch.hvm.vmx.vmcs_pa, ept->eptp);
+#else
         __vmwrite(EPT_POINTER, ept->eptp);
+#endif
 
 #ifndef CONFIG_SVA
         __vmwrite(HOST_PAT, XEN_MSR_PAT);
@@ -1847,7 +1851,13 @@ void vmx_domain_flush_pml_buffers(struct domain *d)
 static void vmx_vcpu_update_eptp(struct vcpu *v, u64 eptp)
 {
     vmx_vmcs_enter(v);
+
+#ifdef CONFIG_SVA
+    sva_load_eptable(v->arch.hvm.vmx.vmcs_pa, eptp);
+#else
     __vmwrite(EPT_POINTER, eptp);
+#endif
+
     vmx_vmcs_exit(v);
 }
 
@@ -1877,12 +1887,8 @@ int vmx_create_vmcs(struct vcpu *v)
     /*
      * Ask SVA to create a new VM. This allocates a VMCS and initializes
      * SVA's metadata structures for the VM.
-     *
-     * For now, we pass a null pointer for the initial extended page table
-     * root pointer. That will be filled in later as we continue porting Xen
-     * and have it put more of the VM life-cycle in SVA's hands.
      */
-    int sva_vmid = sva_allocvm(NULL);
+    int sva_vmid = sva_allocvm();
 
     if (sva_vmid <= 0)
     {
@@ -2209,10 +2215,19 @@ void vmcs_dump_vcpu(struct vcpu *v)
          (vmx_pin_based_exec_control & PIN_BASED_POSTED_INTERRUPT) )
         printk("TPR Threshold = 0x%02x  PostedIntrVec = 0x%02x\n",
                vmr32(TPR_THRESHOLD), vmr16(POSTED_INTR_NOTIFICATION_VECTOR));
+
     if ( (v->arch.hvm.vmx.secondary_exec_control &
           SECONDARY_EXEC_ENABLE_EPT) )
+    {
+#ifdef CONFIG_SVA
+        uint64_t ept_ptr = sva_save_eptable(v->arch.hvm.vmx.vmcs_pa);
+#else
+        uint64_t ept_ptr = vmr(EPT_POINTER);
+#endif
         printk("EPT pointer = 0x%016lx  EPTP index = 0x%04x\n",
-               vmr(EPT_POINTER), vmr16(EPTP_INDEX));
+               ept_ptr, vmr16(EPTP_INDEX));
+    }
+
     n = vmr32(CR3_TARGET_COUNT);
     for ( i = 0; i + 1 < n; i += 2 )
         printk("CR3 target%u=%016lx target%u=%016lx\n",

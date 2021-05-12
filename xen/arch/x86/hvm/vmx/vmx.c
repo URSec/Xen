@@ -2241,7 +2241,11 @@ static void vmx_vcpu_update_eptp(struct vcpu *v)
 
     vmx_vmcs_enter(v);
 
+#ifdef CONFIG_SVA
+    sva_load_eptable(v->arch.hvm.vmx.vmcs_pa, ept->eptp);
+#else
     __vmwrite(EPT_POINTER, ept->eptp);
+#endif
 
     if ( v->arch.hvm.vmx.secondary_exec_control &
          SECONDARY_EXEC_ENABLE_VIRT_EXCEPTIONS )
@@ -3824,8 +3828,11 @@ void vmx_vmexit_handler(struct cpu_user_regs *regs)
         else
         {
             unsigned long eptp;
-
+#ifdef CONFIG_SVA
+            eptp = sva_save_eptable(v->arch.hvm.vmx.vmcs_pa);
+#else
             __vmread(EPT_POINTER, &eptp);
+#endif
 
             if ( (idx = p2m_find_altp2m_by_eptp(v->domain, eptp)) ==
                  INVALID_ALTP2M )
