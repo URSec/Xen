@@ -59,6 +59,10 @@ ifeq ($(CONFIG_SVA),y)
 CFLAGS += -sva
 endif
 
+ifeq ($(CONFIG_SPLIT_STACK),y)
+CFLAGS += -msplit-stack
+endif
+
 # Use the kernel code model.
 CFLAGS += -mcmodel=kernel
 AFLAGS += -mcmodel=kernel

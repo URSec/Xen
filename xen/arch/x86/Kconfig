@@ -185,6 +185,24 @@ config SVA
 	  the Secure Virtual Architecture (SVA).
 
 	  If unsure, say N.
+
+config SPLIT_STACK
+  def_bool n
+  prompt "Split Stack"
+  depends on SVA
+  ---help---
+    Builds Xen with a separate call stack in SVA protected memory.
+    Return addresses, arguments, callee-saved registers, and compiler-
+    controlled spill slots will continue to be referenced through RSP,
+    which points to the protected stack. A separate unprotected (Xen-owned)
+    stack is pointed to by RBX and used for local variables that may be
+    accessed using untrusted pointers; SFI checks on those accesses will
+    prevent errant pointers from accessing anything on the protected stack.
+
+    This requires the SVA option to be enabled.
+
+    If unsure, say N.
+
 endmenu
 
 source "common/Kconfig"
