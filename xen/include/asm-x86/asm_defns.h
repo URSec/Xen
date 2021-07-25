@@ -124,13 +124,18 @@ void ret_from_intr_sva(void);
         .equ .Lr15, 15
 
 #define STACK_CPUINFO_FIELD(field) (1 - CPUINFO_sizeof + CPUINFO_##field)
+#ifdef CONFIG_SPLIT_STACK
+#define STACK_REG r15
+#else
+#define STACK_REG rsp
+#endif
 #define GET_STACK_END(reg)                        \
         .if .Lr##reg >= 8;                        \
         movq $STACK_SIZE-1, %r##reg;              \
         .else;                                    \
         movl $STACK_SIZE-1, %e##reg;              \
         .endif;                                   \
-        orq  %rsp, %r##reg
+        orq  %STACK_REG, %r##reg
 
 #define GET_CPUINFO_FIELD(field, reg)             \
         GET_STACK_END(reg);                       \

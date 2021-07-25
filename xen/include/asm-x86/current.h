@@ -87,12 +87,17 @@ struct cpu_info {
 
 static inline struct cpu_info *get_cpu_info(void)
 {
+#ifdef CONFIG_SPLIT_STACK
+    unsigned long sp;
+    asm ( "mov %%r15, %0" : "=r" (sp) );
+#else
 #ifdef __clang__
     /* Clang complains that sp in the else case is not initialised. */
     unsigned long sp;
     asm ( "mov %%rsp, %0" : "=r" (sp) );
 #else
     register unsigned long sp asm("rsp");
+#endif
 #endif
 
     return (struct cpu_info *)((sp | (STACK_SIZE - 1)) + 1) - 1;
