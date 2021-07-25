@@ -60,7 +60,7 @@ CFLAGS += -sva
 endif
 
 ifeq ($(CONFIG_SPLIT_STACK),y)
-CFLAGS += -msplit-stack
+CFLAGS += -msplit-stack -mno-jump-return
 endif
 
 # Use the kernel code model.
