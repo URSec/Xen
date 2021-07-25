@@ -30,7 +30,9 @@ ENTRY(host_to_guest_gpr_switch)
         movq  UREGS_r14(%rdi), %r14
         pushq %r15
         movq  UREGS_r11(%rdi), %r11
+#ifndef CONFIG_SPLIT_STACK
         movq  UREGS_r15(%rdi), %r15
+#endif
         pushq %rcx /* dummy push, filled by guest_to_host_gpr_switch pointer */
         pushq %rcx
         leaq  guest_to_host_gpr_switch(%rip),%rcx
@@ -44,7 +46,9 @@ ENTRY(guest_to_host_gpr_switch)
         movq  7*8(%rsp), %rdi
         movq  %rax, UREGS_rax(%rdi)
         popq  UREGS_rdi(%rdi)
+#ifndef CONFIG_SPLIT_STACK
         movq  %r15, UREGS_r15(%rdi)
+#endif
         movq  %r11, UREGS_r11(%rdi)
         popq  %r15
         movq  %r14, UREGS_r14(%rdi)
