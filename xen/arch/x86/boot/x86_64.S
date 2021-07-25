@@ -34,6 +34,12 @@ ENTRY(__high_start)
         /* Pass off the Multiboot info structure to C land (if applicable). */
         mov     multiboot_ptr(%rip),%edi
         andq    $~0xf, %rsp /* Align the stack */
+
+#ifdef CONFIG_SPLIT_STACK
+        /* Set up the early split stack. */
+        leaq    (STACK_SIZE - CPUINFO_sizeof) + cpu0_early_split_stack(%rip), %r15
+#endif
+
         call    __start_xen
         BUG     /* __start_xen() shouldn't return. */
 

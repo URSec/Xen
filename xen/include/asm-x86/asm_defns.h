@@ -273,7 +273,9 @@ static always_inline void stac(void)
         xor   %r12d, %r12d
         xor   %r13d, %r13d
         xor   %r14d, %r14d
+#ifndef CONFIG_SPLIT_STACK
         xor   %r15d, %r15d
+#endif
 .endm
 
 #define LOAD_ONE_REG(reg, compat) \

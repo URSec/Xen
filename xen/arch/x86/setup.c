@@ -114,6 +114,11 @@ DEFINE_PER_CPU(struct tss_struct, init_tss);
 char __section(".bss.stack_aligned") __aligned(STACK_SIZE)
     cpu0_stack[STACK_SIZE];
 
+#ifdef CONFIG_SPLIT_STACK
+char __section(".bss.stack_aligned") __aligned(STACK_SIZE)
+    cpu0_early_split_stack[STACK_SIZE];
+#endif
+
 struct cpuinfo_x86 __read_mostly boot_cpu_data = { 0, 0, 0, 0, -1 };
 
 unsigned long __read_mostly mmu_cr4_features = XEN_MINIMAL_CR4;
@@ -1176,6 +1181,12 @@ void __init noreturn __start_xen(unsigned long mbi_p)
             /* Re-sync the stack and then switch to relocated pagetables. */
             asm volatile (
                 "rep movsq        ; " /* re-sync the stack */
+#ifdef CONFIG_SPLIT_STACK
+                "movq %[split_src], %%rsi ; "
+                "movq %[split_dst], %%rdi ; "
+                "movq %[sz], %%rcx        ; "
+                "rep movsq                ; "
+#endif
                 "movq %%cr4,%%rsi ; "
                 "andb $0x7f,%%sil ; "
                 "movq %%rsi,%%cr4 ; " /* CR4.PGE == 0 */
@@ -1185,6 +1196,12 @@ void __init noreturn __start_xen(unsigned long mbi_p)
                 : "=&S" (i), "=&D" (i), "=&c" (i) /* All outputs discarded. */
                 :  [pg] "r" (__pa(idle_pg_table)), "0" (cpu0_stack),
                    "1" (__va(__pa(cpu0_stack))), "2" (STACK_SIZE / 8)
+#ifdef CONFIG_SPLIT_STACK
+                   ,
+                   [split_src]  "r" (cpu0_early_split_stack),
+                   [split_dst] "r" (__va(__pa(cpu0_early_split_stack))),
+                   [sz] "ri" (STACK_SIZE / sizeof(unsigned long))
+#endif
                 : "memory" );
 
             bootstrap_map(NULL);

@@ -140,7 +140,7 @@ restore_all_guest:
 
         /* Stash guest SPEC_CTRL value while we can read struct vcpu. */
         mov VCPU_arch_msrs(%rbx), %rdx
-        mov VCPUMSR_spec_ctrl_raw(%rdx), %r15d
+        mov VCPUMSR_spec_ctrl_raw(%rdx), %r14d
 
         /* Copy guest mappings and switch to per-CPU root page table. */
         mov   VCPU_cr3(%rbx), %r9
@@ -176,7 +176,7 @@ restore_all_guest:
 .Lrag_keep_cr3:
 
         /* Restore stashed SPEC_CTRL value. */
-        mov   %r15d, %eax
+        mov   %r14d, %eax
 
         /* WARNING! `ret`, `call *`, `jmp *` not safe beyond this point. */
         SPEC_CTRL_EXIT_TO_PV    /* Req: a=spec_ctrl %rsp=regs/cpuinfo, Clob: cd */
@@ -586,7 +586,7 @@ ENTRY(common_interrupt)
 
         mov   STACK_CPUINFO_FIELD(xen_cr3)(%r14), %rcx
         mov   STACK_CPUINFO_FIELD(use_pv_cr3)(%r14), %bl
-        mov   %rcx, %r15
+        mov   %rcx, %r13
         test  %rcx, %rcx
         jz    .Lintr_cr3_okay
         movb  $0, STACK_CPUINFO_FIELD(use_pv_cr3)(%r14)
@@ -594,14 +594,17 @@ ENTRY(common_interrupt)
         /* %r12 is still zero at this point. */
         mov   %r12, STACK_CPUINFO_FIELD(xen_cr3)(%r14)
         testb $3, UREGS_cs(%rsp)
-        cmovnz %r12, %r15
+        cmovnz %r12, %r13
         cmovnz %r12d, %ebx
 .Lintr_cr3_okay:
 
         CR4_PV32_RESTORE
+#ifdef CONFIG_SPLIT_STACK
+        andq  $-16, %r15
+#endif
         movq %rsp,%rdi
         call  do_IRQ
-        mov   %r15, STACK_CPUINFO_FIELD(xen_cr3)(%r14)
+        mov   %r13, STACK_CPUINFO_FIELD(xen_cr3)(%r14)
         mov   %bl, STACK_CPUINFO_FIELD(use_pv_cr3)(%r14)
         jmp ret_from_intr
 
@@ -618,16 +621,16 @@ GLOBAL(handle_exception)
 
         mov   STACK_CPUINFO_FIELD(xen_cr3)(%r14), %rcx
         mov   STACK_CPUINFO_FIELD(use_pv_cr3)(%r14), %r13b
-        mov   %rcx, %r15
+        mov   %rcx, %r12
         test  %rcx, %rcx
         jz    .Lxcpt_cr3_okay
         movb  $0, STACK_CPUINFO_FIELD(use_pv_cr3)(%r14)
         mov   %rcx, %cr3
-        /* %r12 is still zero at this point. */
-        mov   %r12, STACK_CPUINFO_FIELD(xen_cr3)(%r14)
+        xor   %eax, %eax
+        mov   %rax, STACK_CPUINFO_FIELD(xen_cr3)(%r14)
         testb $3, UREGS_cs(%rsp)
-        cmovnz %r12, %r15
-        cmovnz %r12d, %r13d
+        cmovnz %rax, %r12
+        cmovnz %eax, %r13d
 .Lxcpt_cr3_okay:
 
 handle_exception_saved:
@@ -684,8 +687,11 @@ handle_exception_saved:
         leaq  exception_table(%rip),%rdx
         PERFC_INCR(exceptions, %rax, %rbx)
         mov   (%rdx, %rax, 8), %rdx
+#ifdef CONFIG_SPLIT_STACK
+        andq  $-16, %r15
+#endif
         INDIRECT_CALL %rdx
-        mov   %r15, STACK_CPUINFO_FIELD(xen_cr3)(%r14)
+        mov   %r12, STACK_CPUINFO_FIELD(xen_cr3)(%r14)
         mov   %r13b, STACK_CPUINFO_FIELD(use_pv_cr3)(%r14)
 #ifdef CONFIG_PV
         testb $3,UREGS_cs(%rsp)
@@ -703,6 +709,9 @@ handle_exception_saved:
 exception_with_ints_disabled:
         testb $3,UREGS_cs(%rsp)         # interrupts disabled outside Xen?
         jnz   FATAL_exception_with_ints_disabled
+#ifdef CONFIG_SPLIT_STACK
+        andq  $-16, %r15
+#endif
         movq  %rsp,%rdi
         call  search_pre_exception_table
         testq %rax,%rax                 # no fixup code for faulting EIP?
@@ -718,12 +727,15 @@ exception_with_ints_disabled:
         rep   movsq                     # make room for ec/ev
 1:      movq  UREGS_error_code(%rsp),%rax # ec/ev
         movq  %rax,UREGS_kernel_sizeof(%rsp)
-        mov   %r15, STACK_CPUINFO_FIELD(xen_cr3)(%r14)
+        mov   %r12, STACK_CPUINFO_FIELD(xen_cr3)(%r14)
         mov   %r13b, STACK_CPUINFO_FIELD(use_pv_cr3)(%r14)
         jmp   restore_all_xen           # return to fixup code
 
 /* No special register assumptions. */
 FATAL_exception_with_ints_disabled:
+#ifdef CONFIG_SPLIT_STACK
+        andq  $-16, %r15
+#endif
         xorl  %esi,%esi
         movq  %rsp,%rdi
         call  fatal_trap
@@ -813,6 +825,9 @@ ENTRY(double_fault)
         mov   %r12, STACK_CPUINFO_FIELD(xen_cr3)(%r14)
 .Ldblf_cr3_okay:
 
+#ifdef CONFIG_SPLIT_STACK
+        andq  $-16, %r15
+#endif
         movq  %rsp,%rdi
         call  do_double_fault
         BUG   /* do_double_fault() shouldn't return. */
@@ -821,6 +836,9 @@ ENTRY(double_fault)
 ENTRY(early_page_fault)
         movl  $TRAP_page_fault,4(%rsp)
         SAVE_ALL
+#ifdef CONFIG_SPLIT_STACK
+        andq  $-16, %r15
+#endif
         movq  %rsp,%rdi
         call  do_early_page_fault
         jmp   restore_all_xen
@@ -839,7 +857,7 @@ handle_ist_exception:
 
         mov   STACK_CPUINFO_FIELD(xen_cr3)(%r14), %rcx
         mov   STACK_CPUINFO_FIELD(use_pv_cr3)(%r14), %bl
-        mov   %rcx, %r15
+        mov   %rcx, %r13
         test  %rcx, %rcx
         jz    .List_cr3_okay
         movb  $0, STACK_CPUINFO_FIELD(use_pv_cr3)(%r14)
@@ -856,7 +874,7 @@ handle_ist_exception:
          * Interrupted guest context. Clear the restore value for xen_cr3
          * and copy the context to stack bottom.
          */
-        xor   %r15, %r15
+        xor   %r13, %r13
         xor   %ebx, %ebx
         GET_CPUINFO_FIELD(guest_cpu_user_regs,di)
         movq  %rsp,%rsi
@@ -867,12 +885,15 @@ handle_ist_exception:
 #else
         ASSERT_CONTEXT_IS_XEN
 #endif
+#ifdef CONFIG_SPLIT_STACK
+        andq  $-16, %r15
+#endif
         movq  %rsp,%rdi
         movzbl UREGS_entry_vector(%rsp),%eax
         leaq  exception_table(%rip),%rdx
         mov   (%rdx, %rax, 8), %rdx
         INDIRECT_CALL %rdx
-        mov   %r15, STACK_CPUINFO_FIELD(xen_cr3)(%r14)
+        mov   %r13, STACK_CPUINFO_FIELD(xen_cr3)(%r14)
         mov   %bl, STACK_CPUINFO_FIELD(use_pv_cr3)(%r14)
         cmpb  $TRAP_nmi,UREGS_entry_vector(%rsp)
         jne   ret_from_intr
