@@ -589,7 +589,9 @@ void show_execution_state(const struct cpu_user_regs *regs)
 
     show_registers(regs);
     show_code(regs);
+#ifndef CONFIG_SPLIT_STACK
     show_stack(regs);
+#endif
 
     console_unlock_recursive_irqrestore(flags);
 }
