@@ -265,7 +265,8 @@ static int ept_set_middle_entry(struct p2m_domain *p2m,
      * Note that map_domain_page() is guaranteed to return a DMAP address
      * under CONFIG_SVA.
      */
-    ASSERT(xen_dmap_make_ro(next_level_table) == 0);
+    int result = xen_dmap_make_ro(next_level_table);
+    ASSERT(result == 0);
 
     /*
      * Declare the new next-level page table to SVA. Note that since
@@ -374,7 +375,8 @@ void ept_free_entry(struct p2m_domain *p2m, ept_entry_t *ept_entry, int level)
      * Note that map_domain_page() is guaranteed to return a DMAP address
      * under CONFIG_SVA.
      */
-    ASSERT(xen_dmap_make_rw(epte) == 0);
+    int result = xen_dmap_make_rw(epte);
+    ASSERT(result == 0);
 #endif
 
     if ( level > 1 )

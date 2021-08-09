@@ -713,7 +713,8 @@ int p2m_alloc_table(struct p2m_domain *p2m)
      * declare its usage as an L4 EPT PTP to SVA.
      */
     paddr_t top_maddr = mfn_to_maddr(top_mfn);
-    ASSERT(xen_dmap_make_ro(__va(top_maddr)) == 0);
+    int result = xen_dmap_make_ro(__va(top_maddr));
+    ASSERT(result == 0);
     sva_declare_l4_eptpage(top_maddr);
 #endif
 
@@ -814,7 +815,8 @@ void p2m_teardown(struct p2m_domain *p2m)
     sva_remove_page(ptp_maddr);
 
     /* Restore write access to the outgoing PTP in Xen's direct map. */
-    ASSERT(xen_dmap_make_rw(__va(ptp_maddr)) == 0);
+    int result = xen_dmap_make_rw(__va(ptp_maddr));
+    ASSERT(result == 0);
 
     /*
      * Recursively free any subtrees under the L4 in top-to-bottom order to
