@@ -1888,7 +1888,7 @@ int vmx_create_vmcs(struct vcpu *v)
      * Ask SVA to create a new VM. This allocates a VMCS and initializes
      * SVA's metadata structures for the VM.
      */
-    int sva_vmid = sva_allocvm();
+    int sva_vmid = sva_allocvm(v->arch.sva_thread_handle);
 
     if (sva_vmid <= 0)
     {
