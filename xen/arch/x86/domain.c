@@ -368,33 +368,6 @@ int arch_vcpu_create(struct vcpu *v)
     else if ( (rc = xstate_alloc_save_area(v)) != 0 )
         return rc;
 
-    spin_lock_init(&v->arch.vpmu.vpmu_lock);
-
-    if ( is_hvm_domain(d) )
-        rc = hvm_vcpu_initialise(v);
-    else if ( !is_idle_domain(d) )
-        rc = pv_vcpu_initialise(v);
-    else
-    {
-        /* Idle domain */
-        v->arch.cr3 = __pa(idle_pg_table);
-        rc = 0;
-        v->arch.msrs = ZERO_BLOCK_PTR; /* Catch stray misuses */
-    }
-
-    if ( rc )
-        goto fail;
-
-    if ( !is_idle_domain(v->domain) )
-    {
-        vpmu_initialise(v);
-
-        if ( (rc = init_vcpu_msr_policy(v)) )
-            goto fail;
-
-        cpuid_policy_updated(v);
-    }
-
 #ifdef CONFIG_SVA
     if ( is_hvm_domain(d) )
     {
@@ -444,9 +417,41 @@ int arch_vcpu_create(struct vcpu *v)
     }
 #endif
 
+    spin_lock_init(&v->arch.vpmu.vpmu_lock);
+
+    if ( is_hvm_domain(d) )
+        rc = hvm_vcpu_initialise(v);
+    else if ( !is_idle_domain(d) )
+        rc = pv_vcpu_initialise(v);
+    else
+    {
+        /* Idle domain */
+        v->arch.cr3 = __pa(idle_pg_table);
+        rc = 0;
+        v->arch.msrs = ZERO_BLOCK_PTR; /* Catch stray misuses */
+    }
+
+    if ( rc )
+        goto fail;
+
+    if ( !is_idle_domain(v->domain) )
+    {
+        vpmu_initialise(v);
+
+        if ( (rc = init_vcpu_msr_policy(v)) )
+            goto fail;
+
+        cpuid_policy_updated(v);
+    }
+
     return rc;
 
  fail:
+#ifdef CONFIG_SVA
+    if (v->arch.sva_thread_handle != 0) {
+        sva_release_stack(v->arch.sva_thread_handle);
+    }
+#endif
     vcpu_destroy_fpu(v);
     xfree(v->arch.msrs);
     v->arch.msrs = NULL;
