@@ -40,6 +40,104 @@ bool vmx_vmenter_helper(const struct cpu_user_regs *regs);
 void vmx_vmexit_handler(struct cpu_user_regs *regs);
 void vmx_vmentry_failure(void);
 
+/**
+ * Copy the guest's non-VMCS-resident register state that was saved
+ * on VM exit by SVA into Xen's guest_cpu_user_regs struct.
+ */
+void get_sva_regs(struct cpu_user_regs *guest_regs, struct vcpu *current_vcpu) {
+    BUG_ON(sva_uctx_get_reg(SVA_REG_RAX, &guest_regs->rax));
+    BUG_ON(sva_uctx_get_reg(SVA_REG_RBX, &guest_regs->rbx));
+    BUG_ON(sva_uctx_get_reg(SVA_REG_RCX, &guest_regs->rcx));
+    BUG_ON(sva_uctx_get_reg(SVA_REG_RDX, &guest_regs->rdx));
+    BUG_ON(sva_uctx_get_reg(SVA_REG_RBP, &guest_regs->rbp));
+    BUG_ON(sva_uctx_get_reg(SVA_REG_RSI, &guest_regs->rsi));
+    BUG_ON(sva_uctx_get_reg(SVA_REG_RDI, &guest_regs->rdi));
+    BUG_ON(sva_uctx_get_reg(SVA_REG_R8, &guest_regs->r8));
+    BUG_ON(sva_uctx_get_reg(SVA_REG_R9, &guest_regs->r9));
+    BUG_ON(sva_uctx_get_reg(SVA_REG_R10, &guest_regs->r10));
+    BUG_ON(sva_uctx_get_reg(SVA_REG_R11, &guest_regs->r11));
+    BUG_ON(sva_uctx_get_reg(SVA_REG_R12, &guest_regs->r12));
+    BUG_ON(sva_uctx_get_reg(SVA_REG_R13, &guest_regs->r13));
+    BUG_ON(sva_uctx_get_reg(SVA_REG_R14, &guest_regs->r14));
+    BUG_ON(sva_uctx_get_reg(SVA_REG_R15, &guest_regs->r15));
+
+    BUG_ON(sva_uctx_get_reg(SVA_REG_CR2, &current_vcpu->arch.hvm.guest_cr[2]));
+
+    BUG_ON(sva_uctx_get_reg(SVA_REG_XCR0, &current_vcpu->arch.xcr0));
+    BUG_ON(sva_uctx_get_reg(SVA_REG_MSR_XSS, &current_vcpu->arch.hvm.msr_xss));
+
+    BUG_ON(sva_uctx_get_reg(SVA_REG_MSR_FMASK, &current_vcpu->arch.hvm.vmx.sfmask));
+    BUG_ON(sva_uctx_get_reg(SVA_REG_MSR_STAR, &current_vcpu->arch.hvm.vmx.star));
+    BUG_ON(sva_uctx_get_reg(SVA_REG_MSR_LSTAR, &current_vcpu->arch.hvm.vmx.lstar));
+
+    BUG_ON(sva_uctx_get_reg(SVA_REG_GS_SHADOW, &current_vcpu->arch.hvm.vmx.shadow_gs));
+}
+
+/**
+ * Copy the guest's non-VMCS-resident register state that will be
+ * restored on VM entry from Xen's guest_cpu_user_regs struct to
+ * SVA's internal VM descriptor.
+ */
+void put_sva_regs(struct cpu_user_regs *guest_regs, struct vcpu *current_vcpu) {
+    BUG_ON(sva_uctx_set_reg(SVA_REG_RAX, guest_regs->rax));
+    BUG_ON(sva_uctx_set_reg(SVA_REG_RBX, guest_regs->rbx));
+    BUG_ON(sva_uctx_set_reg(SVA_REG_RCX, guest_regs->rcx));
+    BUG_ON(sva_uctx_set_reg(SVA_REG_RDX, guest_regs->rdx));
+    BUG_ON(sva_uctx_set_reg(SVA_REG_RBP, guest_regs->rbp));
+    BUG_ON(sva_uctx_set_reg(SVA_REG_RSI, guest_regs->rsi));
+    BUG_ON(sva_uctx_set_reg(SVA_REG_RDI, guest_regs->rdi));
+    BUG_ON(sva_uctx_set_reg(SVA_REG_R8, guest_regs->r8));
+    BUG_ON(sva_uctx_set_reg(SVA_REG_R9, guest_regs->r9));
+    BUG_ON(sva_uctx_set_reg(SVA_REG_R10, guest_regs->r10));
+    BUG_ON(sva_uctx_set_reg(SVA_REG_R11, guest_regs->r11));
+    BUG_ON(sva_uctx_set_reg(SVA_REG_R12, guest_regs->r12));
+    BUG_ON(sva_uctx_set_reg(SVA_REG_R13, guest_regs->r13));
+    BUG_ON(sva_uctx_set_reg(SVA_REG_R14, guest_regs->r14));
+    BUG_ON(sva_uctx_set_reg(SVA_REG_R15, guest_regs->r15));
+
+    BUG_ON(sva_uctx_set_reg(SVA_REG_CR2, current_vcpu->arch.hvm.guest_cr[2]));
+
+    /*
+     * If the guest's XCR0 is set to all zeroes (which is what Xen sets
+     * it to when initializing a vCPU with "fresh" state), force the x87
+     * and SSE bits (bits 0 and 1) on. (Xen's macro XSTATE_FP_SSE
+     * corresponds to the OR of those two bits.)
+     *
+     * The x87 bit must be set in order to avoid getting a general
+     * protection fault when SVA tries to load this value into XCR0 in
+     * non-root mode before VM entry. Vanilla Xen's behavior is to force
+     * the SSE bit on as well, so we will imitate that here to avoid
+     * surprising other parts of the codebase.
+     *
+     * I'm not exactly sure why Xen does this here instead of just
+     * initializing the "fresh" state to have (only) these two bits set.
+     * It may have something to do with the interplay between XCR0 and
+     * Xen's "XCR0 accumulator" variable (v->arch.xcr0_accum), which
+     * tracks all the X-state features that have *ever* been used by this
+     * vCPU since its last reset. Forcing these bits on at this late
+     * stage instead of initializing them that way means that they don't
+     * get set in xcr0_accum until the guest actually chooses to load an
+     * XCR0 value that enables them.
+     */
+    uint64_t guest_xcr0 = current_vcpu->arch.xcr0 | XSTATE_FP_SSE;
+    BUG_ON(sva_uctx_set_reg(SVA_REG_XCR0, guest_xcr0));
+    BUG_ON(sva_uctx_set_reg(SVA_REG_MSR_XSS, current_vcpu->arch.hvm.msr_xss));
+
+    /*
+     * Note: we don't need to copy CSTAR since it's only relevant on AMD
+     * hardware (Intel never supported SYSCALL in 32-bit mode). Xen
+     * handles VM exits for attempted reads and writes to it by the guest
+     * but it never actually installs it on the physical hardware); it
+     * only tracks the written value in struct vcpu so that it can
+     * emulate reads consistent with writes.
+     */
+    BUG_ON(sva_uctx_set_reg(SVA_REG_MSR_FMASK, current_vcpu->arch.hvm.vmx.sfmask));
+    BUG_ON(sva_uctx_set_reg(SVA_REG_MSR_STAR, current_vcpu->arch.hvm.vmx.star));
+    BUG_ON(sva_uctx_set_reg(SVA_REG_MSR_LSTAR, current_vcpu->arch.hvm.vmx.lstar));
+
+    BUG_ON(sva_uctx_set_reg(SVA_REG_GS_SHADOW, current_vcpu->arch.hvm.vmx.shadow_gs));
+}
+
 /*
  * Function: vmx_do_vmentry_sva()
  *
@@ -105,14 +203,6 @@ void vmx_do_vmentry_sva(void)
      * guest_cpu_user_regs structure within it.
      */
     struct cpu_user_regs *guest_regs = guest_cpu_user_regs();
-
-    /*
-     * SVA uses an opaque numeric identifier as a handle for referencing a
-     * particular vCPU in calls to Shade intrinsics, rather than giving Xen
-     * access to the raw physical address of the VMCS. For convenience, we
-     * store this within the existing vmcs_pa field under struct vcpu.
-     */
-    int sva_vmid = (int) current_vcpu->arch.hvm.vmx.vmcs_pa;
 
     /*
      * Run the guest vCPU and handle its VM exits in an infinite loop until
@@ -289,63 +379,7 @@ void vmx_do_vmentry_sva(void)
             continue;
         }
 
-        /*
-         * Copy the guest's non-VMCS-resident register state that will be
-         * restored on VM entry from Xen's guest_cpu_user_regs struct to
-         * SVA's internal VM descriptor.
-         */
-        sva_setvmreg(sva_vmid, VM_REG_RAX, guest_regs->rax);
-        sva_setvmreg(sva_vmid, VM_REG_RBX, guest_regs->rbx);
-        sva_setvmreg(sva_vmid, VM_REG_RCX, guest_regs->rcx);
-        sva_setvmreg(sva_vmid, VM_REG_RDX, guest_regs->rdx);
-        sva_setvmreg(sva_vmid, VM_REG_RBP, guest_regs->rbp);
-        sva_setvmreg(sva_vmid, VM_REG_RSI, guest_regs->rsi);
-        sva_setvmreg(sva_vmid, VM_REG_RDI, guest_regs->rdi);
-        sva_setvmreg(sva_vmid, VM_REG_R8,  guest_regs->r8);
-        sva_setvmreg(sva_vmid, VM_REG_R9,  guest_regs->r9);
-        sva_setvmreg(sva_vmid, VM_REG_R10, guest_regs->r10);
-        sva_setvmreg(sva_vmid, VM_REG_R11, guest_regs->r11);
-        sva_setvmreg(sva_vmid, VM_REG_R12, guest_regs->r12);
-        sva_setvmreg(sva_vmid, VM_REG_R13, guest_regs->r13);
-        sva_setvmreg(sva_vmid, VM_REG_R14, guest_regs->r14);
-        sva_setvmreg(sva_vmid, VM_REG_R15, guest_regs->r15);
-        sva_setvmreg(sva_vmid, VM_REG_CR2, current_vcpu->arch.hvm.guest_cr[2]);
-        /*
-         * If the guest's XCR0 is set to all zeroes (which is what Xen sets
-         * it to when initializing a vCPU with "fresh" state), force the x87
-         * and SSE bits (bits 0 and 1) on. (Xen's macro XSTATE_FP_SSE
-         * corresponds to the OR of those two bits.)
-         *
-         * The x87 bit must be set in order to avoid getting a general
-         * protection fault when SVA tries to load this value into XCR0 in
-         * non-root mode before VM entry. Vanilla Xen's behavior is to force
-         * the SSE bit on as well, so we will imitate that here to avoid
-         * surprising other parts of the codebase.
-         *
-         * I'm not exactly sure why Xen does this here instead of just
-         * initializing the "fresh" state to have (only) these two bits set.
-         * It may have something to do with the interplay between XCR0 and
-         * Xen's "XCR0 accumulator" variable (v->arch.xcr0_accum), which
-         * tracks all the X-state features that have *ever* been used by this
-         * vCPU since its last reset. Forcing these bits on at this late
-         * stage instead of initializing them that way means that they don't
-         * get set in xcr0_accum until the guest actually chooses to load an
-         * XCR0 value that enables them.
-         */
-        uint64_t guest_xcr0 = current_vcpu->arch.xcr0 | XSTATE_FP_SSE;
-        sva_setvmreg(sva_vmid, VM_REG_XCR0, guest_xcr0);
-        sva_setvmreg(sva_vmid, VM_REG_MSR_XSS, current_vcpu->arch.hvm.msr_xss);
-        sva_setvmreg(sva_vmid, VM_REG_MSR_FMASK, current_vcpu->arch.hvm.vmx.sfmask);
-        sva_setvmreg(sva_vmid, VM_REG_MSR_STAR, current_vcpu->arch.hvm.vmx.star);
-        sva_setvmreg(sva_vmid, VM_REG_MSR_LSTAR, current_vcpu->arch.hvm.vmx.lstar);
-        /* Note: we don't need to copy CSTAR since it's only relevant on AMD
-         * hardware (Intel never supported SYSCALL in 32-bit mode). Xen
-         * handles VM exits for attempted reads and writes to it by the guest
-         * but it never actually installs it on the physical hardware; it
-         * only tracks the written value in struct vcpu so that it can
-         * emulate reads consistent with writes. */
-        sva_setvmreg(sva_vmid, VM_REG_GS_SHADOW, current_vcpu->arch.hvm.vmx.shadow_gs);
-
+        put_sva_regs(guest_regs, current_vcpu);
 
         /*
          * Finally, perform VMX VM entry to run the vCPU natively on the
@@ -370,33 +404,7 @@ void vmx_do_vmentry_sva(void)
         else
             vmrun_retval = sva_resumevm();
 
-
-        /*
-         * Copy the guest's non-VMCS-resident register state that was saved
-         * on VM exit by SVA into Xen's guest_cpu_user_regs struct.
-         */
-        guest_regs->rax = sva_getvmreg(sva_vmid, VM_REG_RAX);
-        guest_regs->rbx = sva_getvmreg(sva_vmid, VM_REG_RBX);
-        guest_regs->rcx = sva_getvmreg(sva_vmid, VM_REG_RCX);
-        guest_regs->rdx = sva_getvmreg(sva_vmid, VM_REG_RDX);
-        guest_regs->rbp = sva_getvmreg(sva_vmid, VM_REG_RBP);
-        guest_regs->rsi = sva_getvmreg(sva_vmid, VM_REG_RSI);
-        guest_regs->rdi = sva_getvmreg(sva_vmid, VM_REG_RDI);
-        guest_regs->r8  = sva_getvmreg(sva_vmid, VM_REG_R8);
-        guest_regs->r9  = sva_getvmreg(sva_vmid, VM_REG_R9);
-        guest_regs->r10 = sva_getvmreg(sva_vmid, VM_REG_R10);
-        guest_regs->r11 = sva_getvmreg(sva_vmid, VM_REG_R11);
-        guest_regs->r12 = sva_getvmreg(sva_vmid, VM_REG_R12);
-        guest_regs->r13 = sva_getvmreg(sva_vmid, VM_REG_R13);
-        guest_regs->r14 = sva_getvmreg(sva_vmid, VM_REG_R14);
-        guest_regs->r15 = sva_getvmreg(sva_vmid, VM_REG_R15);
-        current_vcpu->arch.hvm.guest_cr[2] = sva_getvmreg(sva_vmid, VM_REG_CR2);
-        current_vcpu->arch.xcr0 = sva_getvmreg(sva_vmid, VM_REG_XCR0);
-        current_vcpu->arch.hvm.msr_xss = sva_getvmreg(sva_vmid, VM_REG_MSR_XSS);
-        current_vcpu->arch.hvm.vmx.sfmask = sva_getvmreg(sva_vmid, VM_REG_MSR_FMASK);
-        current_vcpu->arch.hvm.vmx.star = sva_getvmreg(sva_vmid, VM_REG_MSR_STAR);
-        current_vcpu->arch.hvm.vmx.lstar = sva_getvmreg(sva_vmid, VM_REG_MSR_LSTAR);
-        current_vcpu->arch.hvm.vmx.shadow_gs = sva_getvmreg(sva_vmid, VM_REG_GS_SHADOW);
+        get_sva_regs(guest_regs, current_vcpu);
 
         /*
          * If sva_runvm() returned due to a nominal VM exit, call Xen's
