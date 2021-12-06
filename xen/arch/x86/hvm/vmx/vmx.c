@@ -911,10 +911,16 @@ static int vmx_load_msr(struct vcpu *v, struct hvm_msr *ctxt)
                 err = -ENXIO;
             break;
         case MSR_IA32_XSS:
-            if ( cpu_has_xsaves && cpu_has_vmx_xsaves )
-                v->arch.hvm.msr_xss = ctxt->msr[i].val;
-            else
+            if ( cpu_has_xsaves && cpu_has_vmx_xsaves ) {
+                if (ctxt->msr[i].val == 0) {
+                    v->arch.hvm.msr_xss = 0;
+                } else {
+                    /* No XSS features currently supported for guests. */
+                    err = -EINVAL;
+                }
+            } else {
                 err = -ENXIO;
+            }
             break;
         default:
             continue;
