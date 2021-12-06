@@ -15,6 +15,7 @@
 #include <asm/asm_defns.h>
 
 #ifdef CONFIG_SVA
+#include <xen/kernel.h>
 #include <sva/vmx_intrinsics.h>
 #endif
 
@@ -43,6 +44,12 @@ static DEFINE_PER_CPU(uint64_t, xcr0);
  */
 static inline bool xsetbv(u32 index, u64 xfeatures)
 {
+#ifdef CONFIG_SVA
+    if (system_state >= SYS_STATE_smp_boot) {
+        ASSERT(index == 0);
+        return sva_uctx_set_reg(SVA_REG_XCR0, xfeatures) == 0;
+    }
+#endif
     u32 hi = xfeatures >> 32;
     u32 lo = (u32)xfeatures;
 
@@ -801,13 +808,9 @@ int handle_xsetbv(u32 index, u64 new_bv)
     if ( (new_bv & ~xcr0_max) || !valid_xcr0(new_bv) )
         return -EINVAL;
 
-#ifndef CONFIG_SVA
-    /*
-     * TODO: Figure out a way SVA can handle this.
-     */
-
     /* By this point, new_bv really should be accepted by hardware. */
-    if ( unlikely(!set_xcr0(new_bv)) )
+    if ( (!IS_ENABLED(CONFIG_SVA) || is_hvm_domain(curr->domain))
+         && unlikely(!set_xcr0(new_bv)) )
     {
         gprintk(XENLOG_ERR, "new_bv %016" PRIx64 " rejected by hardware\n",
                 new_bv);
@@ -815,7 +818,6 @@ int handle_xsetbv(u32 index, u64 new_bv)
 
         return -EFAULT;
     }
-#endif
 
     mask = new_bv & ~curr->arch.xcr0_accum;
     curr->arch.xcr0 = new_bv;
@@ -825,8 +827,9 @@ int handle_xsetbv(u32 index, u64 new_bv)
     if ( new_bv & (XSTATE_NONLAZY & ~X86_XCR0_LWP) )
         curr->arch.nonlazy_xstate_used = 1;
 
-#ifndef CONFIG_SVA
     mask &= curr->fpu_dirtied ? ~XSTATE_FP_SSE : XSTATE_NONLAZY;
+
+#ifndef CONFIG_SVA /* SVA has already initialized new state. */
     if ( mask )
     {
         unsigned long cr0 = read_cr0();
