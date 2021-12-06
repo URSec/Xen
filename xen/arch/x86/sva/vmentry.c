@@ -63,10 +63,6 @@ void get_sva_regs(struct cpu_user_regs *guest_regs, struct vcpu *current_vcpu) {
 
     BUG_ON(sva_uctx_get_reg(SVA_REG_CR2, &current_vcpu->arch.hvm.guest_cr[2]));
 
-    BUG_ON(sva_uctx_get_reg(SVA_REG_MSR_FMASK, &current_vcpu->arch.hvm.vmx.sfmask));
-    BUG_ON(sva_uctx_get_reg(SVA_REG_MSR_STAR, &current_vcpu->arch.hvm.vmx.star));
-    BUG_ON(sva_uctx_get_reg(SVA_REG_MSR_LSTAR, &current_vcpu->arch.hvm.vmx.lstar));
-
     BUG_ON(sva_uctx_get_reg(SVA_REG_GS_SHADOW, &current_vcpu->arch.hvm.vmx.shadow_gs));
 }
 
@@ -93,18 +89,6 @@ void put_sva_regs(struct cpu_user_regs *guest_regs, struct vcpu *current_vcpu) {
     BUG_ON(sva_uctx_set_reg(SVA_REG_R15, guest_regs->r15));
 
     BUG_ON(sva_uctx_set_reg(SVA_REG_CR2, current_vcpu->arch.hvm.guest_cr[2]));
-
-    /*
-     * Note: we don't need to copy CSTAR since it's only relevant on AMD
-     * hardware (Intel never supported SYSCALL in 32-bit mode). Xen
-     * handles VM exits for attempted reads and writes to it by the guest
-     * but it never actually installs it on the physical hardware); it
-     * only tracks the written value in struct vcpu so that it can
-     * emulate reads consistent with writes.
-     */
-    BUG_ON(sva_uctx_set_reg(SVA_REG_MSR_FMASK, current_vcpu->arch.hvm.vmx.sfmask));
-    BUG_ON(sva_uctx_set_reg(SVA_REG_MSR_STAR, current_vcpu->arch.hvm.vmx.star));
-    BUG_ON(sva_uctx_set_reg(SVA_REG_MSR_LSTAR, current_vcpu->arch.hvm.vmx.lstar));
 
     BUG_ON(sva_uctx_set_reg(SVA_REG_GS_SHADOW, current_vcpu->arch.hvm.vmx.shadow_gs));
 }
