@@ -63,9 +63,6 @@ void get_sva_regs(struct cpu_user_regs *guest_regs, struct vcpu *current_vcpu) {
 
     BUG_ON(sva_uctx_get_reg(SVA_REG_CR2, &current_vcpu->arch.hvm.guest_cr[2]));
 
-    BUG_ON(sva_uctx_get_reg(SVA_REG_XCR0, &current_vcpu->arch.xcr0));
-    BUG_ON(sva_uctx_get_reg(SVA_REG_MSR_XSS, &current_vcpu->arch.hvm.msr_xss));
-
     BUG_ON(sva_uctx_get_reg(SVA_REG_MSR_FMASK, &current_vcpu->arch.hvm.vmx.sfmask));
     BUG_ON(sva_uctx_get_reg(SVA_REG_MSR_STAR, &current_vcpu->arch.hvm.vmx.star));
     BUG_ON(sva_uctx_get_reg(SVA_REG_MSR_LSTAR, &current_vcpu->arch.hvm.vmx.lstar));
@@ -96,32 +93,6 @@ void put_sva_regs(struct cpu_user_regs *guest_regs, struct vcpu *current_vcpu) {
     BUG_ON(sva_uctx_set_reg(SVA_REG_R15, guest_regs->r15));
 
     BUG_ON(sva_uctx_set_reg(SVA_REG_CR2, current_vcpu->arch.hvm.guest_cr[2]));
-
-    /*
-     * If the guest's XCR0 is set to all zeroes (which is what Xen sets
-     * it to when initializing a vCPU with "fresh" state), force the x87
-     * and SSE bits (bits 0 and 1) on. (Xen's macro XSTATE_FP_SSE
-     * corresponds to the OR of those two bits.)
-     *
-     * The x87 bit must be set in order to avoid getting a general
-     * protection fault when SVA tries to load this value into XCR0 in
-     * non-root mode before VM entry. Vanilla Xen's behavior is to force
-     * the SSE bit on as well, so we will imitate that here to avoid
-     * surprising other parts of the codebase.
-     *
-     * I'm not exactly sure why Xen does this here instead of just
-     * initializing the "fresh" state to have (only) these two bits set.
-     * It may have something to do with the interplay between XCR0 and
-     * Xen's "XCR0 accumulator" variable (v->arch.xcr0_accum), which
-     * tracks all the X-state features that have *ever* been used by this
-     * vCPU since its last reset. Forcing these bits on at this late
-     * stage instead of initializing them that way means that they don't
-     * get set in xcr0_accum until the guest actually chooses to load an
-     * XCR0 value that enables them.
-     */
-    uint64_t guest_xcr0 = current_vcpu->arch.xcr0 | XSTATE_FP_SSE;
-    BUG_ON(sva_uctx_set_reg(SVA_REG_XCR0, guest_xcr0));
-    BUG_ON(sva_uctx_set_reg(SVA_REG_MSR_XSS, current_vcpu->arch.hvm.msr_xss));
 
     /*
      * Note: we don't need to copy CSTAR since it's only relevant on AMD
