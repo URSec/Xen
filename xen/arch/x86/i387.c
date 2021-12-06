@@ -302,6 +302,10 @@ void vcpu_save_fpu(struct vcpu *v)
 
 void save_fpu_enable(void)
 {
+    /*
+     * NB: `_vcpu_save_fpu` will clear CR0.TS if it returns `true`, so avoid the
+     * overhead of a second `clts()`.
+     */
     if ( !_vcpu_save_fpu(current) )
         clts();
 }
