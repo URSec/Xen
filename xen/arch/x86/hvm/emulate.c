@@ -2054,6 +2054,9 @@ static int hvmemul_write_cr(
 
     case 2:
         current->arch.hvm.guest_cr[2] = val;
+#ifdef CONFIG_SVA
+        BUG_ON(sva_uctx_set_reg(SVA_REG_CR2, val));
+#endif
         rc = X86EMUL_OKAY;
         break;
 

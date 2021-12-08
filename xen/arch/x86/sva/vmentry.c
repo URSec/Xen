@@ -60,8 +60,6 @@ void get_sva_regs(struct cpu_user_regs *guest_regs, struct vcpu *current_vcpu) {
     BUG_ON(sva_uctx_get_reg(SVA_REG_R13, &guest_regs->r13));
     BUG_ON(sva_uctx_get_reg(SVA_REG_R14, &guest_regs->r14));
     BUG_ON(sva_uctx_get_reg(SVA_REG_R15, &guest_regs->r15));
-
-    BUG_ON(sva_uctx_get_reg(SVA_REG_CR2, &current_vcpu->arch.hvm.guest_cr[2]));
 }
 
 /**
@@ -85,8 +83,6 @@ void put_sva_regs(struct cpu_user_regs *guest_regs, struct vcpu *current_vcpu) {
     BUG_ON(sva_uctx_set_reg(SVA_REG_R13, guest_regs->r13));
     BUG_ON(sva_uctx_set_reg(SVA_REG_R14, guest_regs->r14));
     BUG_ON(sva_uctx_set_reg(SVA_REG_R15, guest_regs->r15));
-
-    BUG_ON(sva_uctx_set_reg(SVA_REG_CR2, current_vcpu->arch.hvm.guest_cr[2]));
 }
 
 /*
