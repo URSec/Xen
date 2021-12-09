@@ -40,26 +40,32 @@ bool vmx_vmenter_helper(const struct cpu_user_regs *regs);
 void vmx_vmexit_handler(struct cpu_user_regs *regs);
 void vmx_vmentry_failure(void);
 
+#define VALUE_OR_BUG(x) ({          \
+    sva_result_t __result = (x);    \
+    BUG_ON(__result.error);         \
+    __result.value;                 \
+})
+
 /**
  * Copy the guest's non-VMCS-resident register state that was saved
  * on VM exit by SVA into Xen's guest_cpu_user_regs struct.
  */
 void get_sva_regs(struct cpu_user_regs *guest_regs, struct vcpu *current_vcpu) {
-    BUG_ON(sva_uctx_get_reg(SVA_REG_RAX, &guest_regs->rax));
-    BUG_ON(sva_uctx_get_reg(SVA_REG_RBX, &guest_regs->rbx));
-    BUG_ON(sva_uctx_get_reg(SVA_REG_RCX, &guest_regs->rcx));
-    BUG_ON(sva_uctx_get_reg(SVA_REG_RDX, &guest_regs->rdx));
-    BUG_ON(sva_uctx_get_reg(SVA_REG_RBP, &guest_regs->rbp));
-    BUG_ON(sva_uctx_get_reg(SVA_REG_RSI, &guest_regs->rsi));
-    BUG_ON(sva_uctx_get_reg(SVA_REG_RDI, &guest_regs->rdi));
-    BUG_ON(sva_uctx_get_reg(SVA_REG_R8, &guest_regs->r8));
-    BUG_ON(sva_uctx_get_reg(SVA_REG_R9, &guest_regs->r9));
-    BUG_ON(sva_uctx_get_reg(SVA_REG_R10, &guest_regs->r10));
-    BUG_ON(sva_uctx_get_reg(SVA_REG_R11, &guest_regs->r11));
-    BUG_ON(sva_uctx_get_reg(SVA_REG_R12, &guest_regs->r12));
-    BUG_ON(sva_uctx_get_reg(SVA_REG_R13, &guest_regs->r13));
-    BUG_ON(sva_uctx_get_reg(SVA_REG_R14, &guest_regs->r14));
-    BUG_ON(sva_uctx_get_reg(SVA_REG_R15, &guest_regs->r15));
+    guest_regs->rax = VALUE_OR_BUG(sva_uctx_get_reg(SVA_REG_RAX));
+    guest_regs->rbx = VALUE_OR_BUG(sva_uctx_get_reg(SVA_REG_RBX));
+    guest_regs->rcx = VALUE_OR_BUG(sva_uctx_get_reg(SVA_REG_RCX));
+    guest_regs->rdx = VALUE_OR_BUG(sva_uctx_get_reg(SVA_REG_RDX));
+    guest_regs->rbp = VALUE_OR_BUG(sva_uctx_get_reg(SVA_REG_RBP));
+    guest_regs->rsi = VALUE_OR_BUG(sva_uctx_get_reg(SVA_REG_RSI));
+    guest_regs->rdi = VALUE_OR_BUG(sva_uctx_get_reg(SVA_REG_RDI));
+    guest_regs->r8 = VALUE_OR_BUG(sva_uctx_get_reg(SVA_REG_R8));
+    guest_regs->r9 = VALUE_OR_BUG(sva_uctx_get_reg(SVA_REG_R9));
+    guest_regs->r10 = VALUE_OR_BUG(sva_uctx_get_reg(SVA_REG_R10));
+    guest_regs->r11 = VALUE_OR_BUG(sva_uctx_get_reg(SVA_REG_R11));
+    guest_regs->r12 = VALUE_OR_BUG(sva_uctx_get_reg(SVA_REG_R12));
+    guest_regs->r13 = VALUE_OR_BUG(sva_uctx_get_reg(SVA_REG_R13));
+    guest_regs->r14 = VALUE_OR_BUG(sva_uctx_get_reg(SVA_REG_R14));
+    guest_regs->r15 = VALUE_OR_BUG(sva_uctx_get_reg(SVA_REG_R15));
 }
 
 /**
