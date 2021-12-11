@@ -389,9 +389,11 @@ static always_inline void __vmpclear(u64 sva_vmid)
  */
 static always_inline void __vmread(unsigned long field, unsigned long *value)
 {
-    int sva_retval = sva_readvmcs((enum sva_vmcs_field)field, value);
+    sva_result_t sva_retval = sva_readvmcs((enum sva_vmcs_field)field);
 
-    BUG_ON(sva_retval != 0);
+    BUG_ON(sva_retval.error != 0);
+
+    *value = sva_retval.value;
 }
 
 /*
@@ -408,24 +410,29 @@ static always_inline void __vmwrite(unsigned long field, unsigned long value)
 static inline enum vmx_insn_errno vmread_safe(unsigned long field,
                                               unsigned long *value)
 {
-    int sva_retval = sva_readvmcs((enum sva_vmcs_field)field, value);
+    sva_result_t sva_retval = sva_readvmcs((enum sva_vmcs_field)field);
 
-    if (sva_retval == 0)
+    if (sva_retval.error == 0) {
+        *value = sva_retval.value;
         return VMX_INSN_SUCCEED;
-    else if (sva_retval == -1)
+    } else if (sva_retval.error == -1) {
         return VMX_INSN_FAIL_INVALID;
-    else if (sva_retval == -2)
-    {
+    } else if (sva_retval.error == -2) {
         /*
          * A valid VMCS is loaded but the specified field was nonexistent.
          * Read the VM-instruction error code from the VMCS and return that.
          */
-        uint64_t vm_inst_err;
-        sva_readvmcs((enum sva_vmcs_field)VM_INSTRUCTION_ERROR, &vm_inst_err);
-        return vm_inst_err;
+        sva_result_t result = sva_readvmcs((enum sva_vmcs_field)VM_INSTRUCTION_ERROR);
+        BUG_ON(result.error != 0);
+        return result.value;
+    } else if (sva_retval.error == -ENODEV) {
+        dprintk(XENLOG_ERR, "vmread_safe(): sva_readvmcs() called before VMX "
+            "initialized on cpu %d\n", smp_processor_id());
+        BUG();
     } else {
-        panic("vmread_safe(): sva_readvmcs() returned nonsensical "
-              "error code %d", sva_retval);
+        dprintk(XENLOG_ERR, "vmread_safe(): sva_readvmcs() returned nonsensical "
+              "error code %d\n", sva_retval.error);
+        BUG();
     }
 }
 
@@ -445,12 +452,17 @@ static inline enum vmx_insn_errno vmwrite_safe(unsigned long field,
          * read-only. Read the VM-instruction error code from the VMCS and
          * return that.
          */
-        uint64_t vm_inst_err;
-        sva_readvmcs((enum sva_vmcs_field)VM_INSTRUCTION_ERROR, &vm_inst_err);
-        return vm_inst_err;
+        sva_result_t result = sva_readvmcs((enum sva_vmcs_field)VM_INSTRUCTION_ERROR);
+        BUG_ON(result.error != 0);
+        return result.value;
+    } else if (sva_retval == -ENODEV) {
+        dprintk(XENLOG_ERR, "vmwrite_safe(): sva_writevmcs() called before VMX "
+            "initialized on cpu %d\n", smp_processor_id());
+        BUG();
     } else {
-        panic("vmwrite_safe(): sva_writevmcs() returned nonsensical "
+        dprintk(XENLOG_ERR, "vmwrite_safe(): sva_writevmcs() returned nonsensical "
               "error code %d", sva_retval);
+        BUG();
     }
 }
 
