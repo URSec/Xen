@@ -55,17 +55,28 @@ endif
 # Set up the assembler include path properly for older toolchains.
 CFLAGS += -Wa,-I$(BASEDIR)/include
 
-ifeq ($(clang),y)
-# Note: Any test which adds -no-integrated-as will cause subsequent tests to
-# succeed, and not trigger further additions.
+#
+# Never force -no-integrated-as when building for SVA. This is not necessary
+# since we know SVA's version of Clang is new enough to not be affected by
+# these bugs, and -no-integrated-as can be problematic since the system
+# compiler may not understand the bundle-alignment directives emitted by our
+# CFI implementation.
+#
+# See also a similar section in xen/Rules.mk.
+#
+ifneq ($(CONFIG_SVA),y)
+  ifeq ($(clang),y)
+		# Note: Any test which adds -no-integrated-as will cause subsequent tests
+		# to succeed, and not trigger further additions.
 
-# Check whether clang asm()-s support .include.
-$(call as-option-add,CFLAGS,CC,".include \"asm/indirect_thunk_asm.h\"",,\
-                     -no-integrated-as)
+    # Check whether clang asm()-s support .include.
+    $(call as-option-add,CFLAGS,CC,".include \"asm/indirect_thunk_asm.h\"",,\
+      -no-integrated-as)
 
-# Check whether clang keeps .macro-s between asm()-s:
-# https://bugs.llvm.org/show_bug.cgi?id=36110
-$(call as-option-add,CFLAGS,CC,\
-                     ".macro FOO\n.endm\"); asm volatile (\".macro FOO\n.endm",\
-                     -no-integrated-as)
+    # Check whether clang keeps .macro-s between asm()-s:
+    # https://bugs.llvm.org/show_bug.cgi?id=36110
+    $(call as-option-add,CFLAGS,CC,\
+      ".macro FOO\n.endm\"); asm volatile (\".macro FOO\n.endm",\
+      -no-integrated-as)
+  endif
 endif

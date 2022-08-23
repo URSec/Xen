@@ -93,11 +93,29 @@ endif
 
 AFLAGS-y                += -D__ASSEMBLY__
 
-# Older clang's built-in assembler doesn't understand .skip with labels:
-# https://bugs.llvm.org/show_bug.cgi?id=27369
-ifeq ($(clang),y)
-$(call as-option-add,CFLAGS,CC,".L0:\n.L1:\n.skip (.L1 - .L0)",,\
-                     -no-integrated-as)
+#
+# Don't force -no-integrated-as when building for SVA.
+#
+# Since we know we are building with SVA's custom version of LLVM/Clang, we
+# know that our compiler is knew enough to not be affected by the bug(s) Xen
+# is concerned with. (Furthermore, we know that our SVA compiler is expressly
+# *supposed* to work with this version of Xen, since we co-developed them.)
+#
+# We don't want to use the system assembler since some GAS versions
+# (including some relatively recent ones) evidently don't understand how to
+# parse all the bundle-alignment directives emitted by our CFI
+# implementation.
+#
+# See also a similar section at the end of xen/arch/x86/Rules.mk which we
+# treat similarly.
+#
+ifneq ($(CONFIG_SVA),y)
+  # Older clang's built-in assembler doesn't understand .skip with labels:
+  # https://bugs.llvm.org/show_bug.cgi?id=27369
+  ifeq ($(clang),y)
+   $(call as-option-add,CFLAGS,CC,".L0:\n.L1:\n.skip (.L1 - .L0)",,\
+     -no-integrated-as)
+  endif
 endif
 
 ALL_OBJS := $(ALL_OBJS-y)
