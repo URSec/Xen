@@ -66,8 +66,8 @@ CFLAGS += -Wa,-I$(BASEDIR)/include
 #
 ifneq ($(CONFIG_SVA),y)
   ifeq ($(clang),y)
-		# Note: Any test which adds -no-integrated-as will cause subsequent tests
-		# to succeed, and not trigger further additions.
+    # Note: Any test which adds -no-integrated-as will cause subsequent tests
+    # to succeed, and not trigger further additions.
 
     # Check whether clang asm()-s support .include.
     $(call as-option-add,CFLAGS,CC,".include \"asm/indirect_thunk_asm.h\"",,\
